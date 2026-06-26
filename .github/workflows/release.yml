@@ -28,9 +28,11 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Build Android APK
-        run: eas build --platform android --profile preview --non-interactive --local --output=./app-release.apk
+      # 1. This tells EAS to build in the cloud and download the finished APK right here
+      - name: Build Android APK on EAS Cloud
+        run: eas build --platform android --profile preview --non-interactive --output=./app-release.apk
 
+      # 2. This grabs that downloaded APK and attaches it to your GitHub Release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
