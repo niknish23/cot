@@ -1,9 +1,17 @@
 import Svg, { Path } from 'react-native-svg';
 
-export function MoreIcon({ width = 20, height = 20 }: { width?: number; height?: number }) {
+type MoreIconProps = {
+  width?: number;
+  height?: number;
+  color?: string;
+};
+
+export function MoreIcon({ width = 24, height = 24, color = '#392EFF' }: MoreIconProps) {
   return (
     <Svg width={width} height={height} viewBox="0 0 24 24" fill="none">
-      <Path d="M12 6v.01M12 12v.01M12 18v.01" stroke="#000" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M11.8182 5.32617C11.8905 5.32617 12.0724 5.32617 12.3457 5.39848C12.4885 5.43624 12.5829 5.6154 12.6388 5.76221C12.6947 5.90902 12.6947 6.05364 12.6224 6.14622C12.2844 6.57896 11.6374 6.42176 11.3455 6.34945C11.2343 6.27714 11.1981 6.13252 11.2156 5.98571C11.2332 5.8389 11.3055 5.69429 11.4895 5.43573" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M11.928 12.1188C12.0003 12.0464 12.1821 12.0092 12.4555 12.0634C12.5925 12.0906 12.6927 12.2261 12.7485 12.3543C12.8044 12.4825 12.8044 12.6271 12.7321 12.7378C12.5152 12.9207 12.0046 12.9952 11.493 12.9229C11.3429 12.8506 11.4152 12.706 11.7088 12.3379" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M12.3662 18.4732C12.2939 18.4732 12.2567 18.2201 12.2928 17.927C12.2994 17.8735 12.4013 18.0678 12.4385 18.2332C12.4758 18.3987 12.4758 18.5433 12.3131 18.6178C12.1504 18.6923 11.825 18.6923 11.6755 18.62C11.5259 18.5477 11.5621 18.403 11.6349 18.2743C11.7078 18.1456 11.8162 18.0371 11.9625 17.9812C12.1088 17.9254 12.2895 17.9254 12.4758 17.9254" stroke={color} strokeWidth={2} strokeLinecap="round" />
     </Svg>
   );
 }

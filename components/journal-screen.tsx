@@ -1,28 +1,992 @@
-import React from 'react';
-import { Link } from 'expo-router';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { readThoughts } from '@/lib/doodle-store';
-import { DoodlePreview } from '@/components/doodle-preview';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  Animated,
+  BackHandler,
+  Easing,
+  Keyboard,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-export default function JournalScreen() {
-  const thoughts = readThoughts();
+import { DoodlePreview } from '@/components/doodle-preview';
+import { BackButtonIcon } from '@/components/icons/back-button-icon';
+import { ChatIcon } from '@/components/icons/chat-icon';
+import { CotLogo } from '@/components/icons/cot-logo';
+import { DiaryIcon } from '@/components/icons/diary-icon';
+import { EmptyCalendarIcon } from '@/components/icons/empty-calendar-icon';
+import { LongArrowIcon } from '@/components/icons/long-arrow-icon';
+import { NoThoughtsIcon } from '@/components/icons/no-thoughts-icon';
+import { PlusIcon } from '@/components/icons/plus-icon';
+import { SearchIcon } from '@/components/icons/search-icon';
+import { readThoughts, type ThoughtNote } from '@/lib/doodle-store';
+
+const COLORS = {
+  white: '#FFFFFF',
+  black: '#000000',
+  mainBlue: '#392EFF',
+  cardBlue: '#DAE2FF',
+  slightWhite: '#F7F7F7',
+  borderBlack20: 'rgba(0, 0, 0, 0.20)',
+};
+
+type JournalTab = 'chat' | 'diary';
+
+type CalendarCell = 'flower' | 'empty';
+
+type CalendarCellItem = {
+  kind: CalendarCell;
+  note?: ThoughtNote;
+  isToday?: boolean;
+};
+
+type CalendarMonth = {
+  name: string;
+  thoughtsCount: number;
+  weeks: Array<Array<CalendarCellItem | null>>;
+};
+
+type CalendarDay = {
+  date: Date;
+  notes: ThoughtNote[];
+};
+
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+function isSameDay(left: Date, right: Date) {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
+
+function buildDateSearchTokens(createdAt: number) {
+  const date = new Date(createdAt);
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const year = date.getFullYear();
+  const monthPadded = String(month).padStart(2, '0');
+  const dayPadded = String(day).padStart(2, '0');
+
+  const longLabel = new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
+    .format(date)
+    .toLowerCase();
+
+  const shortLabel = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+    .format(date)
+    .toLowerCase();
+
+  return [
+    longLabel,
+    shortLabel,
+    `${month}/${day}/${year}`,
+    `${monthPadded}/${dayPadded}/${year}`,
+    `${day}/${month}/${year}`,
+    `${dayPadded}/${monthPadded}/${year}`,
+    `${year}-${monthPadded}-${dayPadded}`,
+  ];
+}
+
+function noteMatchesSearch(note: ThoughtNote, query: string) {
+  const normalizedQuery = query.trim().toLowerCase();
+
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  const textBlob = `${note.title} ${note.body ?? ''}`.toLowerCase();
+  if (textBlob.includes(normalizedQuery)) {
+    return true;
+  }
+
+  return buildDateSearchTokens(note.createdAt).some((token) => token.includes(normalizedQuery));
+}
+
+function buildCalendarMonths(notes: ThoughtNote[], year: number): CalendarMonth[] {
+  const today = new Date();
+
+  return MONTH_NAMES.map((name, monthIndex) => {
+    const monthNotes = notes.filter((note) => {
+      const noteDate = new Date(note.createdAt);
+      return noteDate.getFullYear() === year && noteDate.getMonth() === monthIndex;
+    });
+
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+    const firstDayIndex = new Date(year, monthIndex, 1).getDay();
+    const cells: Array<CalendarDay | null> = [];
+
+    for (let emptyIndex = 0; emptyIndex < firstDayIndex; emptyIndex += 1) {
+      cells.push(null);
+    }
+
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const date = new Date(year, monthIndex, day);
+      const dayNotes = monthNotes.filter((note) => isSameDay(new Date(note.createdAt), date));
+      cells.push({ date, notes: dayNotes });
+    }
+
+    while (cells.length % 7 !== 0) {
+      cells.push(null);
+    }
+
+    const weeks: Array<Array<CalendarCellItem | null>> = [];
+
+    for (let cellIndex = 0; cellIndex < cells.length; cellIndex += 7) {
+      weeks.push(
+        cells.slice(cellIndex, cellIndex + 7).map((cell) => {
+          if (!cell) {
+            return null;
+          }
+
+          const isToday = isSameDay(cell.date, today);
+
+          if (cell.notes.length > 0) {
+            return { kind: 'flower', note: cell.notes[0], isToday };
+          }
+
+          return { kind: 'empty', isToday };
+        }),
+      );
+    }
+
+    return {
+      name,
+      thoughtsCount: monthNotes.length,
+      weeks,
+    };
+  });
+}
+
+function ThoughtCardItem({
+  card,
+  onPress,
+}: {
+  card: ThoughtNote;
+  onPress: (id: string) => void;
+}) {
+  const isBlue = Boolean(card.body);
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.header}>Thoughts</Text>
-      <FlatList
-        data={thoughts}
-        keyExtractor={(it) => it.id}
-        renderItem={({ item }) => (
-          <Pressable style={styles.item}>
-            <Link href={`/thought/${item.id}`}><Text style={styles.title}>{item.title}</Text></Link>
-            <DoodlePreview strokes={item.strokes} width={80} height={80} padding={8} />
-          </Pressable>
-        )}
-      />
-      <Link href="/new-thought"><Text style={styles.new}>+ New Thought</Text></Link>
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => onPress(card.id)}
+      style={({ pressed }) => [
+        styles.card,
+        isBlue ? styles.cardBlue : styles.cardGray,
+        pressed && styles.cardPressed,
+      ]}>
+      <View style={styles.cardIconContainer}>
+        <View style={styles.cardPreviewFrame}>
+          <DoodlePreview strokes={card.strokes} width={86} height={56} padding={8} />
+        </View>
+      </View>
+      <Text style={styles.cardText}>{card.title}</Text>
+    </Pressable>
+  );
+}
+
+function EmptyThoughtsState() {
+  return (
+    <View style={styles.emptyStateContainer}>
+      <View style={styles.emptyThoughtsIconWrap}>
+        <NoThoughtsIcon opacity={0.5} />
+      </View>
+
+      <View style={styles.emptyMessage}>
+        <Text style={styles.emptyTitle}>No thoughts...</Text>
+        <Text style={styles.emptySubtitle}>Start a new thought!</Text>
+      </View>
+
+      <View style={styles.emptyIllustrationBottom}>
+        <LongArrowIcon />
+      </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({ container: { flex: 1, padding: 20 }, header: { fontSize: 20, fontWeight: '600' }, item: { paddingVertical: 12 }, title: { fontSize: 16 }, new: { position: 'absolute', right: 20, bottom: 40, backgroundColor: '#392EFF', color: '#fff', padding: 12, borderRadius: 20 } });
+function CalendarCellIcon({ cell }: { cell: CalendarCellItem }) {
+  if (cell.kind === 'flower' && cell.note) {
+    return (
+      <DoodlePreview strokes={cell.note.strokes} width={28} height={28} padding={2} strokeColor={cell.isToday ? COLORS.white : undefined} />
+    );
+  }
+
+  return <EmptyCalendarIcon strokeColor={cell.isToday ? COLORS.white : undefined} />;
+}
+
+function CalendarMonthSection({ month, onLayout }: { month: CalendarMonth; onLayout?: (event: any) => void }) {
+  return (
+    <View style={styles.monthSection} onLayout={onLayout}>
+      <View style={styles.monthHeader}>
+        <Text style={styles.monthName}>{month.name}</Text>
+        <Text style={styles.monthCount}>{month.thoughtsCount} thoughts</Text>
+      </View>
+
+      <View style={styles.calendarGrid}>
+        {month.weeks.map((week, weekIndex) => (
+          <View key={`${month.name}-${weekIndex}`} style={styles.weekRow}>
+            {week.map((day, dayIndex) => (
+              <View
+                key={`${month.name}-${weekIndex}-${dayIndex}`}
+                style={[styles.dayCell, day?.isToday && styles.dayCellToday]}>
+                {day ? <CalendarCellIcon cell={day} /> : null}
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function BottomNavButton({
+  variant,
+  onPress,
+  active = false,
+  children,
+}: {
+  variant: 'chat' | 'add' | 'profile';
+  onPress: () => void;
+  active?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.navButton,
+        active && styles.navButtonActive,
+        variant === 'add' && styles.navButtonAdd,
+        pressed && styles.navButtonPressed,
+      ]}>
+      {children}
+    </Pressable>
+  );
+}
+
+function ThoughtsGridPane({
+  notes,
+  onCardPress,
+  emptyTitle,
+  emptySubtitle,
+}: {
+  notes: ThoughtNote[];
+  onCardPress: (id: string) => void;
+  emptyTitle: string;
+  emptySubtitle: string;
+}) {
+  if (notes.length === 0) {
+    return (
+      <View style={styles.pane}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.emptyScrollContent}
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}>
+          <View style={styles.searchEmptyStateContainer}>
+            <Text style={styles.searchEmptyTitle}>{emptyTitle}</Text>
+            <Text style={styles.searchEmptySubtitle}>{emptySubtitle}</Text>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.pane}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}>
+        <View style={styles.grid}>
+          <View style={styles.column}>
+            {notes
+              .filter((_, index) => index % 2 === 0)
+              .map((card) => (
+                <ThoughtCardItem key={card.id} card={card} onPress={onCardPress} />
+              ))}
+          </View>
+          <View style={styles.column}>
+            {notes
+              .filter((_, index) => index % 2 === 1)
+              .map((card) => (
+                <ThoughtCardItem key={card.id} card={card} onPress={onCardPress} />
+              ))}
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function ChatPane({ onCardPress }: { onCardPress: (id: string) => void }) {
+  const notes = readThoughts();
+
+  if (notes.length === 0) {
+    return (
+      <View style={styles.pane}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.emptyScrollContent}
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}>
+          <EmptyThoughtsState />
+        </ScrollView>
+      </View>
+    );
+  }
+
+  return (
+    <ThoughtsGridPane
+      notes={notes}
+      onCardPress={onCardPress}
+      emptyTitle="No thoughts..."
+      emptySubtitle="Start a new thought!"
+    />
+  );
+}
+
+function DiaryPane({ active }: { active: boolean }) {
+  const notes = readThoughts();
+  const months = useMemo(() => buildCalendarMonths(notes, 2026), [notes]);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const monthLayouts = useRef<Record<number, number>>({});
+  const currentMonthIndex = useMemo(() => new Date().getMonth(), []);
+
+  const scrollToCurrentMonth = () => {
+    const targetY = monthLayouts.current[currentMonthIndex];
+
+    if (targetY == null) {
+      return;
+    }
+
+    scrollViewRef.current?.scrollTo({ y: Math.max(targetY - 12, 0), animated: false });
+  };
+
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      scrollToCurrentMonth();
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [active, months]);
+
+  return (
+    <View style={styles.pane}>
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}>
+        <View style={styles.calendarCard}>
+          <Text style={styles.yearTitle}>2026</Text>
+          {months.map((month, monthIndex) => (
+            <CalendarMonthSection
+              key={month.name}
+              month={month}
+              onLayout={(event) => {
+                monthLayouts.current[monthIndex] = event.nativeEvent.layout.y;
+
+                if (active && monthIndex === currentMonthIndex) {
+                  scrollToCurrentMonth();
+                }
+              }}
+            />
+          ))}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: JournalTab; onThoughtPress?: (id: string) => void }) {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const [activeTab, setActiveTab] = useState<JournalTab>(initialTab);
+  const [contentWidth, setContentWidth] = useState(0);
+  const [barWidth, setBarWidth] = useState(0);
+  const [searchMode, setSearchMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchOriginTab, setSearchOriginTab] = useState<JournalTab>(initialTab);
+  const [searchInputFocused, setSearchInputFocused] = useState(false);
+  const contentTranslateX = useRef(new Animated.Value(0)).current;
+  const overlayX = useRef(new Animated.Value(0)).current;
+  const searchTransition = useRef(new Animated.Value(0)).current;
+  const searchInputRef = useRef<TextInput>(null);
+  const notes = readThoughts();
+  const normalizedSearchQuery = searchQuery.trim();
+  const searchResults = useMemo(() => notes.filter((note) => noteMatchesSearch(note, searchQuery)), [notes, searchQuery]);
+  const showSearchResults = searchMode && normalizedSearchQuery.length > 0;
+
+  const closeSearchToChat = useCallback(() => {
+    Keyboard.dismiss();
+    setSearchMode(false);
+    setSearchQuery('');
+    setSearchInputFocused(false);
+    setActiveTab('chat');
+  }, []);
+
+  const closeSearchToOrigin = useCallback(() => {
+    Keyboard.dismiss();
+    setSearchMode(false);
+    setSearchQuery('');
+    setSearchInputFocused(false);
+    setActiveTab(searchOriginTab);
+  }, [searchOriginTab]);
+
+  useEffect(() => {
+    Animated.timing(searchTransition, {
+      toValue: searchMode ? 1 : 0,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [searchMode, searchTransition]);
+
+  useEffect(() => {
+    if (!searchMode) {
+      return;
+    }
+
+    const focusHandle = requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+    });
+
+    return () => cancelAnimationFrame(focusHandle);
+  }, [searchMode]);
+
+  useEffect(() => {
+    // Automatically retract when search isn't actively being used.
+    if (!searchMode || (!searchInputFocused && normalizedSearchQuery.length === 0)) {
+      Keyboard.dismiss();
+    }
+  }, [normalizedSearchQuery.length, searchInputFocused, searchMode]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (!searchMode) {
+          return false;
+        }
+
+        if (normalizedSearchQuery.length === 0) {
+          closeSearchToChat();
+          return true;
+        }
+
+        closeSearchToOrigin();
+        return true;
+      });
+
+      return () => subscription.remove();
+    }, [closeSearchToChat, closeSearchToOrigin, normalizedSearchQuery.length, searchMode]),
+  );
+
+  useEffect(() => {
+    if (!contentWidth || !barWidth) {
+      return;
+    }
+
+    const targetContentX = activeTab === 'chat' ? 0 : -contentWidth;
+    const segmentWidth = (barWidth - 24 - 22) / 3;
+    const targetOverlayX = activeTab === 'chat' ? 0 : (segmentWidth + 11) * 2;
+
+    Animated.parallel([
+      Animated.timing(contentTranslateX, {
+        toValue: targetContentX,
+        duration: 280,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(overlayX, {
+        toValue: targetOverlayX,
+        duration: 280,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [activeTab, barWidth, contentTranslateX, contentWidth, overlayX]);
+
+  const segmentWidth = barWidth ? (barWidth - 24 - 22) / 3 : 0;
+
+  return (
+    <View style={styles.container}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <View style={styles.headerShell}>
+          <Animated.View
+            pointerEvents={searchMode ? 'none' : 'auto'}
+            style={[
+              styles.header,
+              {
+                opacity: searchTransition.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+                transform: [
+                  {
+                    translateX: searchTransition.interpolate({ inputRange: [0, 1], outputRange: [0, -26] }),
+                  },
+                ],
+              },
+            ]}>
+            <CotLogo />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Search"
+              style={({ pressed }) => [styles.headerAction, pressed && styles.headerActionPressed]}
+              onPress={() => {
+                setSearchOriginTab(activeTab);
+                setSearchMode(true);
+              }}>
+              <SearchIcon />
+            </Pressable>
+          </Animated.View>
+
+          <Animated.View
+            pointerEvents={searchMode ? 'auto' : 'none'}
+            style={[
+              styles.header,
+              styles.headerSearchSnippet,
+              {
+                opacity: searchTransition,
+                transform: [
+                  {
+                    translateX: searchTransition.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }),
+                  },
+                ],
+              },
+            ]}>
+            <View style={styles.searchSnippetLeftGroup}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Back from search"
+                style={({ pressed }) => [styles.searchSnippetBackButton, pressed && styles.headerActionPressed]}
+                onPress={() => {
+                  if (normalizedSearchQuery.length === 0) {
+                    closeSearchToChat();
+                    return;
+                  }
+
+                  closeSearchToOrigin();
+                }}>
+                <BackButtonIcon width={24} height={24} />
+              </Pressable>
+
+              <TextInput
+                ref={searchInputRef}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Search..."
+                placeholderTextColor="rgba(0, 0, 0, 0.50)"
+                style={styles.searchSnippetInput}
+                selectionColor={COLORS.mainBlue}
+                returnKeyType="search"
+                onFocus={() => setSearchInputFocused(true)}
+                onBlur={() => {
+                  setSearchInputFocused(false);
+                  Keyboard.dismiss();
+                }}
+              />
+            </View>
+
+            <View style={styles.searchSnippetRightIcon}>
+              <SearchIcon width={18.44} height={20.9} />
+            </View>
+          </Animated.View>
+        </View>
+
+        <View
+          style={styles.contentViewport}
+          onLayout={(event) => {
+            const width = event.nativeEvent.layout.width;
+            if (width !== contentWidth) {
+              setContentWidth(width);
+            }
+          }}>
+          {showSearchResults ? (
+            <ThoughtsGridPane
+              notes={searchResults}
+              onCardPress={onThoughtPress ?? (() => {})}
+              emptyTitle="No matching thoughts"
+              emptySubtitle="Try a keyword or a date like 3/12/2026"
+            />
+          ) : (
+            <Animated.View
+              style={[
+                styles.slidingRow,
+                {
+                  width: contentWidth ? contentWidth * 2 : undefined,
+                  transform: [{ translateX: contentTranslateX }],
+                },
+              ]}>
+              <ChatPane onCardPress={onThoughtPress ?? (() => {})} />
+              <DiaryPane active={activeTab === 'diary'} />
+            </Animated.View>
+          )}
+        </View>
+      </SafeAreaView>
+
+      <View style={styles.bottomBarWrapper}>
+        <View
+          style={styles.bottomBar}
+          onLayout={(event) => {
+            const width = event.nativeEvent.layout.width;
+            if (width !== barWidth) {
+              setBarWidth(width);
+            }
+          }}>
+          {barWidth ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.navButtonOverlay,
+                {
+                  width: segmentWidth,
+                  transform: [{ translateX: overlayX }],
+                },
+              ]}
+            />
+          ) : null}
+          <BottomNavButton variant="chat" active={activeTab === 'chat'} onPress={() => setActiveTab('chat')}>
+            <ChatIcon />
+          </BottomNavButton>
+          <BottomNavButton variant="add" onPress={() => router.push('/new-thought')}>
+            <PlusIcon />
+          </BottomNavButton>
+          <BottomNavButton variant="profile" active={activeTab === 'diary'} onPress={() => setActiveTab('diary')}>
+            <DiaryIcon />
+          </BottomNavButton>
+        </View>
+      </View>
+
+      {searchMode && normalizedSearchQuery.length === 0 ? (
+        <Pressable
+          style={[styles.searchDismissOverlay, { top: insets.top + 49 }]}
+          onPress={() => {
+            closeSearchToChat();
+          }}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+  },
+  safeArea: {
+    flex: 1,
+  },
+  headerShell: {
+    height: 49,
+    zIndex: 30,
+    backgroundColor: COLORS.white,
+    overflow: 'hidden',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderBlack20,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+  },
+  headerSearchSnippet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  },
+  headerAction: {
+    padding: 4,
+  },
+  searchSnippetLeftGroup: {
+    width: 200.78,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 18,
+  },
+  searchSnippetBackButton: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchSnippetInput: {
+    flex: 1,
+    color: 'rgba(0, 0, 0, 0.5)',
+    fontSize: 16,
+    fontWeight: '500',
+    padding: 0,
+  },
+  searchSnippetRightIcon: {
+    width: 18.44,
+    height: 20.9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerActionPressed: {
+    opacity: 0.6,
+  },
+  searchDismissOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    top: 49,
+    zIndex: 20,
+  },
+  contentViewport: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+    overflow: 'hidden',
+  },
+  slidingRow: {
+    flexDirection: 'row',
+    flex: 1,
+  },
+  pane: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 32,
+    paddingTop: 24,
+    paddingBottom: 120,
+  },
+  emptyScrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 120,
+  },
+  emptyStateContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  emptyThoughtsIconWrap: {
+    marginTop: 6,
+    alignItems: 'center',
+  },
+  emptyMessage: {
+    marginTop: 24,
+    alignItems: 'center',
+    gap: 12,
+  },
+  emptyTitle: {
+    width: 188.71,
+    textAlign: 'center',
+    color: '#392EFF',
+    fontSize: 26,
+    fontWeight: '500',
+    lineHeight: 31.2,
+    opacity: 0.5,
+  },
+  emptySubtitle: {
+    textAlign: 'center',
+    color: '#392EFF',
+    fontSize: 16,
+    fontWeight: '500',
+    lineHeight: 19.2,
+    opacity: 0.5,
+  },
+  emptyIllustrationBottom: {
+    marginTop: 56,
+    opacity: 0.7,
+  },
+  searchEmptyStateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    gap: 10,
+  },
+  searchEmptyTitle: {
+    color: COLORS.black,
+    fontSize: 22,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  searchEmptySubtitle: {
+    color: 'rgba(0, 0, 0, 0.55)',
+    fontSize: 15,
+    fontWeight: '400',
+    textAlign: 'center',
+  },
+  grid: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  column: {
+    flex: 1,
+    gap: 8,
+  },
+  card: {
+    padding: 12,
+    borderRadius: 34,
+    alignItems: 'center',
+    gap: 12,
+    minHeight: 158,
+  },
+  cardBlue: {
+    backgroundColor: COLORS.cardBlue,
+  },
+  cardGray: {
+    backgroundColor: COLORS.slightWhite,
+  },
+  cardPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
+  },
+  cardIconContainer: {
+    width: '100%',
+    height: 72,
+  },
+  cardPreviewFrame: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cardText: {
+    textAlign: 'center',
+    color: COLORS.black,
+    fontSize: 16,
+    fontWeight: '400',
+    lineHeight: 17.6,
+  },
+  calendarCard: {
+    gap: 12,
+  },
+  yearTitle: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: COLORS.black,
+  },
+  monthSection: {
+    gap: 12,
+  },
+  monthHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  monthName: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.black,
+  },
+  monthCount: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: COLORS.mainBlue,
+    opacity: 0.7,
+  },
+  calendarGrid: {
+    gap: 4,
+  },
+  weekRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  dayCell: {
+    flex: 1,
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  dayCellToday: {
+    backgroundColor: COLORS.mainBlue,
+    borderRadius: 16,
+  },
+  bottomBarWrapper: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 28,
+    alignItems: 'center',
+    paddingHorizontal: 53,
+  },
+  bottomBar: {
+    width: '100%',
+    maxWidth: 287,
+    height: 79,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    padding: 12,
+    backgroundColor: COLORS.white,
+    borderRadius: 34,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 19.4,
+    elevation: 8,
+    overflow: 'hidden',
+  },
+  navButtonOverlay: {
+    position: 'absolute',
+    left: 12,
+    top: 12,
+    bottom: 12,
+    backgroundColor: COLORS.cardBlue,
+    borderRadius: 22,
+  },
+  navButton: {
+    flex: 1,
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  navButtonActive: {
+    backgroundColor: 'transparent',
+  },
+  navButtonAdd: {
+    backgroundColor: COLORS.mainBlue,
+    borderRadius: 23,
+  },
+  navButtonPressed: {
+    opacity: 0.75,
+    transform: [{ scale: 0.96 }],
+  },
+});

@@ -1,0 +1,17 @@
+import Svg, { Path } from 'react-native-svg';
+
+const MAIN_BLUE = '#392EFF';
+
+type LongArrowIconProps = {
+  width?: number;
+  height?: number;
+};
+
+export function LongArrowIcon({ width = 17, height = 160 }: LongArrowIconProps) {
+  return (
+    <Svg width={width} height={height} viewBox="0 0 17 160" fill="none">
+      <Path d="M9.28516 1V158.273" stroke={MAIN_BLUE} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M1.00049 152.924C4.20649 154.046 5.32811 154.845 6.69161 155.809C8.0363 156.759 8.86144 158.056 9.3007 158.18C11.6029 158.829 10.8688 154.696 11.6667 152.772C13.0326 150.199 13.7547 149.237 14.2746 148.636C14.5562 148.353 14.8739 148.115 15.4419 147.388" stroke={MAIN_BLUE} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
+}

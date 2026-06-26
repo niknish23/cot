@@ -1,9 +1,21 @@
 import Svg, { Path } from 'react-native-svg';
 
-export function BackButtonIcon({ width = 24, height = 24 }: { width?: number; height?: number }) {
+const MAIN_BLUE = '#392EFF';
+
+type BackButtonIconProps = {
+  width?: number;
+  height?: number;
+};
+
+export function BackButtonIcon({ width = 24, height = 24 }: BackButtonIconProps) {
   return (
     <Svg width={width} height={height} viewBox="0 0 24 24" fill="none">
-      <Path d="M15 18l-6-6 6-6" stroke="#392EFF" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Path
+        d="M16.3369 2.48193C15.3754 4.72777 14.414 6.00972 13.2489 7.09649C11.9194 8.33659 9.84038 9.94233 8.22951 11.1532C7.9061 11.3963 7.66684 11.6339 7.66323 11.8761C7.64194 13.3025 9.98497 14.2846 12.8308 17.328C14.2357 19.0124 15.0501 20.1498 15.4104 20.751C15.6116 21.0341 15.8501 21.2727 16.0959 21.5185"
+        stroke={MAIN_BLUE}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
     </Svg>
   );
 }

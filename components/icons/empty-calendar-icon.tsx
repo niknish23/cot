@@ -1,0 +1,22 @@
+import Svg, { Path } from 'react-native-svg';
+
+const MAIN_BLUE = '#392EFF';
+
+type EmptyCalendarIconProps = {
+  width?: number;
+  height?: number;
+  strokeColor?: string;
+};
+
+export function EmptyCalendarIcon({ width = 3, height = 3, strokeColor = MAIN_BLUE }: EmptyCalendarIconProps) {
+  return (
+    <Svg width={width} height={height} viewBox="0 0 3 3" fill="none">
+      <Path
+        d="M0.640137 1.3656C0.805857 1.19989 1.01551 0.99023 1.28668 0.760487C1.42465 0.643601 1.59929 0.572173 1.68466 0.736634C1.77002 0.901095 1.77002 1.31539 1.68717 1.57024C1.60431 1.82509 1.43859 1.90795 1.27036 1.9092C1.10213 1.91046 0.936417 1.8276 0.851047 1.70206C0.765678 1.57651 0.765678 1.4108 0.848536 1.30471C1.02646 1.07692 1.43357 1.07309 1.72608 1.09318C1.86669 1.10283 1.93574 1.32041 1.91628 1.46792C1.89682 1.61543 1.77254 1.73972 1.62565 1.82446C1.47877 1.9092 1.31305 1.95063 0.891228 1.61669"
+        stroke={strokeColor}
+        strokeWidth={1.28}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
