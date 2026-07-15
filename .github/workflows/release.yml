@@ -1,9 +1,8 @@
 name: Build and Upload to GitHub Releases
-
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*' # Triggers whenever you push a tag like v1.0.5
 
 jobs:
   build:
@@ -16,7 +15,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
 
+      # Using 'npm install' is more forgiving if package-lock.json isn't perfectly synced
       - name: Install EAS CLI and Dependencies
         run: |
           npm install -g eas-cli
@@ -28,9 +29,17 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Build Android APK
-        run: eas build --platform android --profile preview --non-interactive --local --output=./app-release.apk
+      # Triggers the cloud build and safely waits for it to finish
+      - name: Build Android APK on EAS Cloud
+        run: eas build --platform android --profile preview --non-interactive --wait
 
+      # Fetches the finished download link from Expo and saves it as an app-release.apk file
+      - name: Download APK artifact
+        run: |
+          eas build:list --platform android --profile preview --limit 1 --json --non-interactive > build.json
+          node -e "const fs = require('fs'); const artifacts = JSON.parse(fs.readFileSync('build.json'))[0].artifacts; if (artifacts && artifacts.buildUrl) { require('child_process').execSync('curl -L ' + artifacts.buildUrl + ' -o app-release.apk'); } else { console.error('No build URL found'); process.exit(1); }"
+
+      # Automatically attaches the downloaded apk file right into your public GitHub release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
