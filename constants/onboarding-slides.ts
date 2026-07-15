@@ -1,0 +1,48 @@
+export const ONBOARDING_SLIDES = [
+  {
+    animationSource: require('../assets/animations/onb_1_an.svg'),
+    animationAspectRatio: 445 / 393,
+    illustrationTopOffset: 10,
+    title: 'Record',
+    subtitle: 'Record your thoughts whenever you have them.',
+    iconName: 'chat' as const,
+    buttonLabel: 'Next',
+  },
+  {
+    gifSource: require('../assets/animations/onb_2_gif.gif'),
+    gifDurationMs: 4080,
+    animationAspectRatio: 1080 / 994,
+    illustrationHorizontalInset: 51,
+    illustrationTopOffset: -40,
+    title: 'Fill them up',
+    subtitle: 'You can choose to expand on these thoughts whenever you want, no pressure!',
+    iconName: 'pencil' as const,
+    iconMirrored: true,
+    buttonLabel: 'Next',
+  },
+  {
+    animationSource: require('../assets/animations/onb_3_an.svg'),
+    animationAspectRatio: 332 / 263,
+    animationGapAboveTitle: 30,
+    freezeAnimationLastFrame: true,
+    illustrationHorizontalInset: 65,
+    title: 'Doodle away!',
+    subtitle: 'Associate your thoughts with a doodle so you remember them better.',
+    iconName: 'flower' as const,
+    buttonLabel: 'Next',
+  },
+  {
+    animationSource: require('../assets/animations/onb_4_an.svg'),
+    animationAspectRatio: 292 / 356,
+    animationGapAboveTitle: 68,
+    freezeAnimationLastFrame: true,
+    illustrationHorizontalInset: 32,
+    title: 'Doodle Garden',
+    subtitle: 'All your thoughts get saved in the calendar, so think away!',
+    iconName: 'diary' as const,
+    buttonLabel: 'Start thinking!',
+    hideSkip: true,
+  },
+] as const;
+
+export type OnboardingSlide = (typeof ONBOARDING_SLIDES)[number];

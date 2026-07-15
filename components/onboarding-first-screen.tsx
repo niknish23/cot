@@ -1,80 +1,31 @@
-import { useEffect, useMemo, useRef } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
-import { CotFlowerIcon } from '@/components/icons/cot-flower-icon';
+import { OnboardingAnimation } from '@/components/onboarding-animation';
+import {
+  getSlideUpWordsDuration,
+  OnboardingSlideUpWords,
+} from '@/components/onboarding-slide-up-words';
 
 const COLORS = {
   white: '#FFFFFF',
   black: '#000000',
   mainBlue: '#392EFF',
-  slightWhite: '#F7F7F7',
+  tagline: 'rgba(0, 0, 0, 0.20)',
 };
 
 const BASE_WIDTH = 390;
 const BASE_HEIGHT = 844;
+const TEXT_START_DELAY_MS = 2500;
+const TAGLINE_DELAY_AFTER_WELCOME_MS = 300;
+const BUTTON_OFFSET_Y = 10;
+const BUTTON_DURATION_MS = 420;
 
-type AnimatedTextProps = {
-  text: string;
-  delay?: number;
-  style?: any;
-  charStyle?: any;
-};
-
-function AnimatedText({ text, delay = 0, style, charStyle }: AnimatedTextProps) {
-  const animations = useRef(text.split('').map(() => new Animated.Value(0))).current;
-
-  useEffect(() => {
-    animations.forEach((value) => value.setValue(0));
-
-    Animated.stagger(
-      100,
-      animations.map((value, index) =>
-        Animated.sequence([
-          Animated.delay(delay + index * 100),
-          Animated.spring(value, {
-            toValue: 1,
-            useNativeDriver: true,
-            damping: 12,
-            stiffness: 200,
-            mass: 0.8,
-          }),
-        ]),
-      ),
-    ).start();
-  }, [animations, delay, text]);
-
-  return (
-    <View style={[style, styles.animatedTextRow]}>
-      {text.split('').map((character, index) => {
-        const animation = animations[index];
-
-        return (
-          <Animated.Text
-            key={`${character}-${index}`}
-            style={[
-              charStyle,
-              {
-                opacity: animation,
-                transform: [
-                  {
-                    translateY: animation.interpolate({ inputRange: [0, 1], outputRange: [30, 0] }),
-                  },
-                  {
-                    rotate: animation.interpolate({ inputRange: [0, 1], outputRange: ['45deg', '0deg'] }),
-                  },
-                  {
-                    scale: animation.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] }),
-                  },
-                ],
-              },
-            ]}>
-            {character}
-          </Animated.Text>
-        );
-      })}
-    </View>
-  );
-}
+const INTRO_ANIMATION_SCALE = 1.3;
+const BRAND_ANIMATION_BASE_WIDTH = 182.45;
+const BRAND_ANIMATION_BASE_HEIGHT = 119.19;
+const WELCOME_TEXT = 'Welcome to';
+const TAGLINE_TEXT = 'collection-of-thoughts';
 
 type OnboardingFirstScreenProps = {
   onContinue: () => void;
@@ -84,78 +35,110 @@ export function OnboardingFirstScreen({ onContinue }: OnboardingFirstScreenProps
   const { width, height } = useWindowDimensions();
   const scale = Math.min(width / BASE_WIDTH, height / BASE_HEIGHT);
   const buttonOpacity = useRef(new Animated.Value(0)).current;
-  const buttonTranslateY = useRef(new Animated.Value(24)).current;
-  const flowerRotation = useRef(new Animated.Value(0)).current;
+  const buttonTranslateY = useRef(new Animated.Value(BUTTON_OFFSET_Y)).current;
+  const [showTagline, setShowTagline] = useState(false);
+  const [showButton, setShowButton] = useState(false);
 
   const layout = useMemo(
     () => ({
-      welcomeLeft: 144.29 * scale,
-      welcomeTop: 344.18 * scale,
-      welcomeWidth: 105 * scale,
+      heroTop: 276 * scale,
+      welcomeSize: 18.74 * scale,
+      animationWidth: BRAND_ANIMATION_BASE_WIDTH * INTRO_ANIMATION_SCALE * scale,
+      animationHeight: BRAND_ANIMATION_BASE_HEIGHT * INTRO_ANIMATION_SCALE * scale,
+      taglineSize: 12 * scale,
+      taglineGap: 10 * scale,
       buttonLeft: 32 * scale,
-      buttonTop: 694 * scale,
+      buttonTop: 674 * scale,
       buttonWidth: 329 * scale,
       buttonHeight: 59 * scale,
-      welcomeSize: 18.74 * scale,
-      cotSize: 56.62 * scale,
-      flowerWidth: 28.45 * scale,
-      flowerHeight: 28.36 * scale,
-      flowerGap: 4.72 * scale,
     }),
     [scale],
   );
 
+  const welcomeDurationMs = getSlideUpWordsDuration(WELCOME_TEXT.trim().split(/\s+/).length);
+  const taglineDurationMs = getSlideUpWordsDuration(1);
+
   useEffect(() => {
-    Animated.loop(
-      Animated.timing(flowerRotation, {
-        toValue: 1,
-        duration: 1500,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    ).start();
+    const taglineTimer = setTimeout(() => {
+      setShowTagline(true);
+    }, TEXT_START_DELAY_MS + welcomeDurationMs + TAGLINE_DELAY_AFTER_WELCOME_MS);
+
+    return () => clearTimeout(taglineTimer);
+  }, [welcomeDurationMs]);
+
+  useEffect(() => {
+    if (!showTagline) {
+      return;
+    }
+
+    const buttonTimer = setTimeout(() => {
+      setShowButton(true);
+    }, taglineDurationMs);
+
+    return () => clearTimeout(buttonTimer);
+  }, [showTagline, taglineDurationMs]);
+
+  useEffect(() => {
+    if (!showButton) {
+      return;
+    }
+
+    buttonOpacity.setValue(0);
+    buttonTranslateY.setValue(BUTTON_OFFSET_Y);
 
     Animated.parallel([
       Animated.timing(buttonOpacity, {
         toValue: 1,
-        duration: 450,
-        delay: 500,
+        duration: BUTTON_DURATION_MS,
         useNativeDriver: true,
       }),
       Animated.timing(buttonTranslateY, {
         toValue: 0,
-        duration: 450,
-        delay: 500,
+        duration: BUTTON_DURATION_MS,
         useNativeDriver: true,
       }),
     ]).start();
-  }, [buttonOpacity, buttonTranslateY, flowerRotation]);
-
-  const flowerRotateStyle = {
-    transform: [
-      {
-        rotate: flowerRotation.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }),
-      },
-    ],
-  };
+  }, [buttonOpacity, buttonTranslateY, showButton]);
 
   return (
     <View style={styles.container}>
-      <View style={[styles.brandGroup, { left: layout.welcomeLeft, top: layout.welcomeTop, width: layout.welcomeWidth }]}>
-        <AnimatedText text="Welcome to" delay={0} style={styles.welcome} charStyle={styles.welcomeChar} />
+      <View style={[styles.heroSection, { top: layout.heroTop }]}>
+        <OnboardingSlideUpWords
+          startDelay={TEXT_START_DELAY_MS}
+          style={styles.welcomeRow}
+          text={WELCOME_TEXT}
+          wordStyle={[styles.welcome, { fontSize: layout.welcomeSize }]}
+        />
 
-        <View style={[styles.cotRow, { gap: layout.flowerGap }]}>
-          <AnimatedText text="C" delay={150} style={styles.cotCharWrap} charStyle={[styles.cotChar, { fontSize: layout.cotSize }]} />
-
-          <Animated.View style={[styles.flowerWrap, flowerRotateStyle, { width: layout.flowerWidth, height: layout.flowerHeight }]}>
-            <CotFlowerIcon width={layout.flowerWidth} height={layout.flowerHeight} />
-          </Animated.View>
-
-          <AnimatedText text="t" delay={220} style={styles.cotCharWrap} charStyle={[styles.cotChar, { fontSize: layout.cotSize }]} />
+        <View
+          style={[
+            styles.animationWrap,
+            {
+              width: layout.animationWidth,
+              height: layout.animationHeight,
+              marginTop: -2 * scale,
+            },
+          ]}>
+          <OnboardingAnimation
+            freezeLastFrame
+            skipLoopPatch
+            source={require('@/assets/animations/intro_an.svg')}
+            style={styles.introAnimation}
+          />
         </View>
+
+        {showTagline ? (
+          <OnboardingSlideUpWords
+            startDelay={0}
+            style={[styles.taglineRow, { marginTop: layout.taglineGap }]}
+            text={TAGLINE_TEXT}
+            wordStyle={[styles.tagline, { fontSize: layout.taglineSize }]}
+          />
+        ) : null}
       </View>
 
       <Animated.View
+        pointerEvents={showButton ? 'auto' : 'none'}
         style={[
           styles.buttonWrap,
           {
@@ -182,57 +165,49 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderRadius: 39,
   },
-  brandGroup: {
+  heroSection: {
     position: 'absolute',
-    width: '100%',
+    left: 0,
+    right: 0,
     alignItems: 'center',
+  },
+  welcomeRow: {
+    justifyContent: 'center',
   },
   welcome: {
     color: COLORS.black,
     fontWeight: '400',
     textAlign: 'center',
+  },
+  animationWrap: {
+    alignSelf: 'center',
+    overflow: 'hidden',
+  },
+  introAnimation: {
     width: '100%',
+    height: '100%',
+    backgroundColor: 'transparent',
+  },
+  taglineRow: {
     justifyContent: 'center',
   },
-  welcomeChar: {
-    color: COLORS.black,
+  tagline: {
+    color: COLORS.tagline,
     fontWeight: '400',
-  },
-  animatedTextRow: {
-    flexDirection: 'row',
-  },
-  cotRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    marginTop: 1,
-  },
-  cotCharWrap: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cotChar: {
-    color: COLORS.black,
-    fontWeight: '500',
-    lineHeight: 68.59,
-  },
-  flowerWrap: {
-    justifyContent: 'center',
-    alignItems: 'center',
+    textAlign: 'center',
   },
   buttonWrap: {
     position: 'absolute',
   },
   button: {
     flex: 1,
-    backgroundColor: COLORS.slightWhite,
+    backgroundColor: COLORS.mainBlue,
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
   buttonText: {
-    color: COLORS.mainBlue,
+    color: COLORS.white,
     fontWeight: '500',
   },
 });

@@ -17,7 +17,7 @@ import { DiscardConfirmModal } from '@/components/discard-confirm-modal';
 import { ArrowRightIcon } from '@/components/icons/arrow-right-icon';
 import { BackButtonIcon } from '@/components/icons/back-button-icon';
 import { FlowerIcon } from '@/components/icons/flower-icon';
-import { saveThoughtDraft } from '@/lib/doodle-store';
+import { clearPendingThoughtDate, saveThoughtDraft } from '@/lib/doodle-store';
 
 const COLORS = {
   white: '#FFFFFF',
@@ -169,6 +169,12 @@ export default function NewThoughtScreen() {
     router.back();
   };
 
+  const handleDiscardDraft = () => {
+    clearPendingThoughtDate();
+    setDiscardModalVisible(false);
+    router.back();
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.shell}>
@@ -261,10 +267,7 @@ export default function NewThoughtScreen() {
         <DiscardConfirmModal
           visible={discardModalVisible}
           onStay={() => setDiscardModalVisible(false)}
-          onDiscard={() => {
-            setDiscardModalVisible(false);
-            router.back();
-          }}
+          onDiscard={handleDiscardDraft}
         />
       </View>
     </View>

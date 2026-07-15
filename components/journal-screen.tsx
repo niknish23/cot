@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,11 +21,10 @@ import { ChatIcon } from '@/components/icons/chat-icon';
 import { CotLogo } from '@/components/icons/cot-logo';
 import { DiaryIcon } from '@/components/icons/diary-icon';
 import { EmptyCalendarIcon } from '@/components/icons/empty-calendar-icon';
-import { LongArrowIcon } from '@/components/icons/long-arrow-icon';
 import { NoThoughtsIcon } from '@/components/icons/no-thoughts-icon';
 import { PlusIcon } from '@/components/icons/plus-icon';
 import { SearchIcon } from '@/components/icons/search-icon';
-import { readThoughts, type ThoughtNote } from '@/lib/doodle-store';
+import { clearPendingThoughtDate, hydrateThoughts, readThoughts, setPendingThoughtDate, type ThoughtNote } from '@/lib/doodle-store';
 
 const COLORS = {
   white: '#FFFFFF',
@@ -37,12 +37,15 @@ const COLORS = {
 
 type JournalTab = 'chat' | 'diary';
 
-type CalendarCell = 'flower' | 'empty';
-
 type CalendarCellItem = {
-  kind: CalendarCell;
-  note?: ThoughtNote;
-  isToday?: boolean;
+  date: Date;
+  notes: ThoughtNote[];
+  isToday: boolean;
+};
+
+type SelectedDiaryDay = {
+  date: Date;
+  notes: ThoughtNote[];
 };
 
 type CalendarMonth = {
@@ -77,6 +80,14 @@ function isSameDay(left: Date, right: Date) {
     left.getMonth() === right.getMonth() &&
     left.getDate() === right.getDate()
   );
+}
+
+function formatDayHeader(date: Date) {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date);
 }
 
 function buildDateSearchTokens(createdAt: number) {
@@ -167,11 +178,11 @@ function buildCalendarMonths(notes: ThoughtNote[], year: number): CalendarMonth[
 
           const isToday = isSameDay(cell.date, today);
 
-          if (cell.notes.length > 0) {
-            return { kind: 'flower', note: cell.notes[0], isToday };
-          }
-
-          return { kind: 'empty', isToday };
+          return {
+            date: cell.date,
+            notes: cell.notes,
+            isToday,
+          };
         }),
       );
     }
@@ -182,6 +193,188 @@ function buildCalendarMonths(notes: ThoughtNote[], year: number): CalendarMonth[
       weeks,
     };
   });
+}
+
+function DayThoughtCardItem({
+  card,
+  onPress,
+}: {
+  card: ThoughtNote;
+  onPress: (id: string) => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => onPress(card.id)}
+      style={({ pressed }) => [styles.dayCard, pressed && styles.cardPressed]}>
+      <View style={styles.dayCardPreviewWrap}>
+        <DoodlePreview strokes={card.strokes} width={40} height={42} padding={8} />
+      </View>
+      <Text style={styles.dayCardText}>{card.title}</Text>
+    </Pressable>
+  );
+}
+
+function DayThoughtsPane({
+  date,
+  notes,
+  onBack,
+  onCardPress,
+  onAddThought,
+  bottomInset,
+}: {
+  date: Date;
+  notes: ThoughtNote[];
+  onBack: () => void;
+  onCardPress: (id: string) => void;
+  onAddThought: () => void;
+  bottomInset: number;
+}) {
+  return (
+    <View style={styles.pane}>
+      <View style={styles.dayHeader}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back to calendar"
+          onPress={onBack}
+          style={({ pressed }) => [styles.dayHeaderBackButton, pressed && styles.headerActionPressed]}>
+          <BackButtonIcon width={24} height={24} />
+        </Pressable>
+        <Text style={styles.dayHeaderDate}>{formatDayHeader(date)}</Text>
+        <View style={styles.dayHeaderSpacer} />
+      </View>
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[styles.dayScrollContent, { paddingBottom: 120 + bottomInset }]}
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}>
+        <View style={styles.dayGrid}>
+          <View style={styles.dayColumn}>
+            {notes
+              .filter((_, index) => index % 2 === 0)
+              .map((card) => (
+                <DayThoughtCardItem key={card.id} card={card} onPress={onCardPress} />
+              ))}
+          </View>
+          <View style={styles.dayColumn}>
+            {notes
+              .filter((_, index) => index % 2 === 1)
+              .map((card) => (
+                <DayThoughtCardItem key={card.id} card={card} onPress={onCardPress} />
+              ))}
+          </View>
+        </View>
+      </ScrollView>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Add thought for this day"
+        onPress={onAddThought}
+        style={({ pressed }) => [
+          styles.dayFab,
+          { bottom: 24 + bottomInset },
+          pressed && styles.dayFabPressed,
+        ]}>
+        <PlusIcon width={32} height={32} color={COLORS.white} />
+      </Pressable>
+    </View>
+  );
+}
+
+function DayThoughtsSheet({
+  date,
+  notes,
+  onClose,
+  onCardPress,
+  onAddThought,
+  bottomInset,
+}: {
+  date: Date;
+  notes: ThoughtNote[];
+  onClose: () => void;
+  onCardPress: (id: string) => void;
+  onAddThought: () => void;
+  bottomInset: number;
+}) {
+  const { height } = useWindowDimensions();
+  const sheetHeight = Math.min(height * 0.88, height - 48);
+  const translateY = useRef(new Animated.Value(sheetHeight)).current;
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+
+  const animateClose = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(backdropOpacity, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: sheetHeight,
+        duration: 280,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      if (finished) {
+        onClose();
+      }
+    });
+  }, [backdropOpacity, onClose, sheetHeight, translateY]);
+
+  useEffect(() => {
+    translateY.setValue(sheetHeight);
+    backdropOpacity.setValue(0);
+
+    Animated.parallel([
+      Animated.timing(backdropOpacity, {
+        toValue: 1,
+        duration: 280,
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 320,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [backdropOpacity, sheetHeight, translateY]);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      animateClose();
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [animateClose]);
+
+  return (
+    <View style={styles.daySheetOverlay} pointerEvents="box-none">
+      <Pressable style={styles.daySheetBackdropPressable} onPress={animateClose}>
+        <Animated.View style={[styles.daySheetBackdrop, { opacity: backdropOpacity }]} />
+      </Pressable>
+
+      <Animated.View
+        style={[
+          styles.daySheet,
+          {
+            height: sheetHeight,
+            transform: [{ translateY }],
+          },
+        ]}>
+        <DayThoughtsPane
+          bottomInset={bottomInset}
+          date={date}
+          notes={notes}
+          onAddThought={onAddThought}
+          onBack={animateClose}
+          onCardPress={onCardPress}
+        />
+      </Animated.View>
+    </View>
+  );
 }
 
 function ThoughtCardItem({
@@ -213,35 +406,50 @@ function ThoughtCardItem({
 }
 
 function EmptyThoughtsState() {
+  const { width } = useWindowDimensions();
+  const layoutScale = width / 393;
+  const artTop = (269.12 - 104) * layoutScale;
+  const textGap = (394.5 - (269.12 + 107)) * layoutScale;
+
   return (
-    <View style={styles.emptyStateContainer}>
-      <View style={styles.emptyThoughtsIconWrap}>
-        <NoThoughtsIcon opacity={0.5} />
+    <View style={[styles.emptyStateContainer, { paddingTop: artTop }]}>
+      <View style={styles.emptyStateArt}>
+        <NoThoughtsIcon />
       </View>
 
-      <View style={styles.emptyMessage}>
+      <View style={[styles.emptyMessage, { marginTop: textGap }]}>
         <Text style={styles.emptyTitle}>No thoughts...</Text>
         <Text style={styles.emptySubtitle}>Start a new thought!</Text>
-      </View>
-
-      <View style={styles.emptyIllustrationBottom}>
-        <LongArrowIcon />
       </View>
     </View>
   );
 }
 
 function CalendarCellIcon({ cell }: { cell: CalendarCellItem }) {
-  if (cell.kind === 'flower' && cell.note) {
+  if (cell.notes.length > 0) {
     return (
-      <DoodlePreview strokes={cell.note.strokes} width={28} height={28} padding={2} strokeColor={cell.isToday ? COLORS.white : undefined} />
+      <DoodlePreview
+        strokes={cell.notes[0].strokes}
+        width={28}
+        height={28}
+        padding={2}
+        strokeColor={cell.isToday ? COLORS.white : undefined}
+      />
     );
   }
 
   return <EmptyCalendarIcon strokeColor={cell.isToday ? COLORS.white : undefined} />;
 }
 
-function CalendarMonthSection({ month, onLayout }: { month: CalendarMonth; onLayout?: (event: any) => void }) {
+function CalendarMonthSection({
+  month,
+  onDayPress,
+  onLayout,
+}: {
+  month: CalendarMonth;
+  onDayPress: (date: Date, notes: ThoughtNote[]) => void;
+  onLayout?: (event: any) => void;
+}) {
   return (
     <View style={styles.monthSection} onLayout={onLayout}>
       <View style={styles.monthHeader}>
@@ -252,13 +460,32 @@ function CalendarMonthSection({ month, onLayout }: { month: CalendarMonth; onLay
       <View style={styles.calendarGrid}>
         {month.weeks.map((week, weekIndex) => (
           <View key={`${month.name}-${weekIndex}`} style={styles.weekRow}>
-            {week.map((day, dayIndex) => (
-              <View
-                key={`${month.name}-${weekIndex}-${dayIndex}`}
-                style={[styles.dayCell, day?.isToday && styles.dayCellToday]}>
-                {day ? <CalendarCellIcon cell={day} /> : null}
-              </View>
-            ))}
+            {week.map((day, dayIndex) => {
+              if (!day) {
+                return <View key={`${month.name}-${weekIndex}-${dayIndex}`} style={styles.dayCell} />;
+              }
+
+              const dayCellStyle = [styles.dayCell, day.isToday && styles.dayCellToday];
+
+              if (day.notes.length === 0) {
+                return (
+                  <View key={`${month.name}-${weekIndex}-${dayIndex}`} style={dayCellStyle}>
+                    <CalendarCellIcon cell={day} />
+                  </View>
+                );
+              }
+
+              return (
+                <Pressable
+                  key={`${month.name}-${weekIndex}-${dayIndex}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={`View thoughts for ${formatDayHeader(day.date)}`}
+                  onPress={() => onDayPress(day.date, day.notes)}
+                  style={({ pressed }) => [dayCellStyle, pressed && styles.dayCellPressed]}>
+                  <CalendarCellIcon cell={day} />
+                </Pressable>
+              );
+            })}
           </View>
         ))}
       </View>
@@ -348,9 +575,7 @@ function ThoughtsGridPane({
   );
 }
 
-function ChatPane({ onCardPress }: { onCardPress: (id: string) => void }) {
-  const notes = readThoughts();
-
+function ChatPane({ notes, onCardPress }: { notes: ThoughtNote[]; onCardPress: (id: string) => void }) {
   if (notes.length === 0) {
     return (
       <View style={styles.pane}>
@@ -375,8 +600,15 @@ function ChatPane({ onCardPress }: { onCardPress: (id: string) => void }) {
   );
 }
 
-function DiaryPane({ active }: { active: boolean }) {
-  const notes = readThoughts();
+function DiaryPane({
+  notes,
+  active,
+  onDayPress,
+}: {
+  notes: ThoughtNote[];
+  active: boolean;
+  onDayPress: (date: Date, dayNotes: ThoughtNote[]) => void;
+}) {
   const months = useMemo(() => buildCalendarMonths(notes, 2026), [notes]);
   const scrollViewRef = useRef<ScrollView>(null);
   const monthLayouts = useRef<Record<number, number>>({});
@@ -418,6 +650,7 @@ function DiaryPane({ active }: { active: boolean }) {
             <CalendarMonthSection
               key={month.name}
               month={month}
+              onDayPress={onDayPress}
               onLayout={(event) => {
                 monthLayouts.current[monthIndex] = event.nativeEvent.layout.y;
 
@@ -443,11 +676,16 @@ export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: Jour
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOriginTab, setSearchOriginTab] = useState<JournalTab>(initialTab);
   const [searchInputFocused, setSearchInputFocused] = useState(false);
+  const [selectedDiaryDay, setSelectedDiaryDay] = useState<SelectedDiaryDay | null>(null);
   const contentTranslateX = useRef(new Animated.Value(0)).current;
   const overlayX = useRef(new Animated.Value(0)).current;
   const searchTransition = useRef(new Animated.Value(0)).current;
   const searchInputRef = useRef<TextInput>(null);
-  const notes = readThoughts();
+  const [notesVersion, setNotesVersion] = useState(0);
+  const notes = useMemo(() => {
+    void notesVersion;
+    return readThoughts();
+  }, [notesVersion]);
   const normalizedSearchQuery = searchQuery.trim();
   const searchResults = useMemo(() => notes.filter((note) => noteMatchesSearch(note, searchQuery)), [notes, searchQuery]);
   const showSearchResults = searchMode && normalizedSearchQuery.length > 0;
@@ -467,6 +705,43 @@ export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: Jour
     setSearchInputFocused(false);
     setActiveTab(searchOriginTab);
   }, [searchOriginTab]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void hydrateThoughts().then(() => {
+        setNotesVersion((version) => version + 1);
+      });
+    }, []),
+  );
+
+  useEffect(() => {
+    if (!selectedDiaryDay) {
+      return;
+    }
+
+    const updatedNotes = readThoughts()
+      .filter((note) => isSameDay(new Date(note.createdAt), selectedDiaryDay.date))
+      .sort((left, right) => right.createdAt - left.createdAt);
+
+    setSelectedDiaryDay((current) => {
+      if (!current) {
+        return null;
+      }
+
+      const hasSameNotes =
+        current.notes.length === updatedNotes.length &&
+        current.notes.every((note, index) => note.id === updatedNotes[index]?.id);
+
+      if (hasSameNotes) {
+        return current;
+      }
+
+      return {
+        date: current.date,
+        notes: updatedNotes,
+      };
+    });
+  }, [notesVersion, selectedDiaryDay?.date]);
 
   useEffect(() => {
     Animated.timing(searchTransition, {
@@ -542,6 +817,27 @@ export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: Jour
   }, [activeTab, barWidth, contentTranslateX, contentWidth, overlayX]);
 
   const segmentWidth = barWidth ? (barWidth - 24 - 22) / 3 : 0;
+
+  const handleDiaryDayPress = useCallback((date: Date, dayNotes: ThoughtNote[]) => {
+    setSelectedDiaryDay({
+      date,
+      notes: [...dayNotes].sort((left, right) => right.createdAt - left.createdAt),
+    });
+  }, []);
+
+  const handleAddThoughtForDay = useCallback(() => {
+    if (!selectedDiaryDay) {
+      return;
+    }
+
+    setPendingThoughtDate(selectedDiaryDay.date);
+    router.push('/new-thought');
+  }, [router, selectedDiaryDay]);
+
+  const closeDiaryDaySheet = useCallback(() => {
+    setSelectedDiaryDay(null);
+    clearPendingThoughtDate();
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -650,8 +946,8 @@ export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: Jour
                   transform: [{ translateX: contentTranslateX }],
                 },
               ]}>
-              <ChatPane onCardPress={onThoughtPress ?? (() => {})} />
-              <DiaryPane active={activeTab === 'diary'} />
+              <ChatPane notes={notes} onCardPress={onThoughtPress ?? (() => {})} />
+              <DiaryPane notes={notes} active={activeTab === 'diary'} onDayPress={handleDiaryDayPress} />
             </Animated.View>
           )}
         </View>
@@ -681,7 +977,12 @@ export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: Jour
           <BottomNavButton variant="chat" active={activeTab === 'chat'} onPress={() => setActiveTab('chat')}>
             <ChatIcon />
           </BottomNavButton>
-          <BottomNavButton variant="add" onPress={() => router.push('/new-thought')}>
+          <BottomNavButton
+            variant="add"
+            onPress={() => {
+              clearPendingThoughtDate();
+              router.push('/new-thought');
+            }}>
             <PlusIcon />
           </BottomNavButton>
           <BottomNavButton variant="profile" active={activeTab === 'diary'} onPress={() => setActiveTab('diary')}>
@@ -692,10 +993,21 @@ export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: Jour
 
       {searchMode && normalizedSearchQuery.length === 0 ? (
         <Pressable
-          style={[styles.searchDismissOverlay, { top: insets.top + 49 }]}
+          style={[styles.searchDismissOverlay, { top: insets.top + 53 }]}
           onPress={() => {
             closeSearchToChat();
           }}
+        />
+      ) : null}
+
+      {selectedDiaryDay ? (
+        <DayThoughtsSheet
+          bottomInset={insets.bottom}
+          date={selectedDiaryDay.date}
+          notes={selectedDiaryDay.notes}
+          onAddThought={handleAddThoughtForDay}
+          onCardPress={onThoughtPress ?? (() => {})}
+          onClose={closeDiaryDaySheet}
         />
       ) : null}
     </View>
@@ -711,7 +1023,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerShell: {
-    height: 49,
+    height: 53,
     zIndex: 30,
     backgroundColor: COLORS.white,
     overflow: 'hidden',
@@ -723,7 +1035,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 32,
-    paddingVertical: 16,
+    paddingVertical: 12,
   },
   headerSearchSnippet: {
     position: 'absolute',
@@ -765,7 +1077,7 @@ const styles = StyleSheet.create({
   },
   searchDismissOverlay: {
     ...StyleSheet.absoluteFillObject,
-    top: 49,
+    top: 53,
     zIndex: 20,
   },
   contentViewport: {
@@ -797,17 +1109,14 @@ const styles = StyleSheet.create({
   emptyStateContainer: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
   },
-  emptyThoughtsIconWrap: {
-    marginTop: 6,
+  emptyStateArt: {
     alignItems: 'center',
   },
   emptyMessage: {
-    marginTop: 24,
     alignItems: 'center',
-    gap: 12,
+    gap: 13,
+    opacity: 0.5,
   },
   emptyTitle: {
     width: 188.71,
@@ -816,19 +1125,112 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: '500',
     lineHeight: 31.2,
-    opacity: 0.5,
   },
   emptySubtitle: {
+    alignSelf: 'stretch',
     textAlign: 'center',
     color: '#392EFF',
     fontSize: 16,
     fontWeight: '500',
     lineHeight: 19.2,
-    opacity: 0.5,
   },
-  emptyIllustrationBottom: {
-    marginTop: 56,
-    opacity: 0.7,
+  dayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    backgroundColor: COLORS.white,
+  },
+  dayHeaderBackButton: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayHeaderDate: {
+    opacity: 0.5,
+    color: COLORS.black,
+    fontSize: 14,
+    fontWeight: '400',
+    lineHeight: 18.2,
+  },
+  dayHeaderSpacer: {
+    width: 24,
+    height: 24,
+  },
+  dayScrollContent: {
+    paddingTop: 18,
+    paddingHorizontal: 34.5,
+    paddingBottom: 120,
+  },
+  daySheetOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 40,
+    justifyContent: 'flex-end',
+  },
+  daySheetBackdropPressable: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  daySheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+  },
+  daySheet: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 39,
+    borderTopRightRadius: 39,
+    overflow: 'hidden',
+  },
+  dayFab: {
+    position: 'absolute',
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.mainBlue,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  dayFabPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.96 }],
+  },
+  dayGrid: {
+    flexDirection: 'row',
+    gap: 16,
+    maxWidth: 324,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  dayColumn: {
+    flex: 1,
+    gap: 16,
+  },
+  dayCard: {
+    paddingHorizontal: 16,
+    paddingVertical: 24,
+    backgroundColor: COLORS.slightWhite,
+    borderRadius: 19,
+    alignItems: 'center',
+    gap: 12,
+  },
+  dayCardPreviewWrap: {
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayCardText: {
+    width: '100%',
+    textAlign: 'center',
+    color: COLORS.black,
+    fontSize: 16,
+    fontWeight: '500',
   },
   searchEmptyStateContainer: {
     flex: 1,
@@ -937,6 +1339,9 @@ const styles = StyleSheet.create({
   dayCellToday: {
     backgroundColor: COLORS.mainBlue,
     borderRadius: 16,
+  },
+  dayCellPressed: {
+    opacity: 0.75,
   },
   bottomBarWrapper: {
     position: 'absolute',

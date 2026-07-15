@@ -1,17 +1,23 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
+import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { hydrateThoughts } from '@/lib/doodle-store';
 
 export const unstable_settings = {
-  anchor: '(tabs)',
+  anchor: 'index',
   initialRouteName: 'index',
 };
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+
+  useEffect(() => {
+    void hydrateThoughts();
+  }, []);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

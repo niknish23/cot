@@ -1,3 +1,5 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 export type Point = {
   x: number;
   y: number;
@@ -22,15 +24,73 @@ export type ThoughtDraft = {
   body?: string;
 };
 
+const THOUGHTS_STORAGE_KEY = 'saved-thoughts-v1';
+
 let currentDoodle: DoodleStroke[] | null = null;
 let pendingThought: ThoughtDraft | null = null;
+let pendingThoughtCreatedAt: number | null = null;
 let savedThoughts: ThoughtNote[] = [];
+let hydratePromise: Promise<void> | null = null;
 
-export function saveDoodle(strokes: DoodleStroke[]) {
-  currentDoodle = strokes.map((stroke) => ({
+function cloneStrokes(strokes: DoodleStroke[]) {
+  return strokes.map((stroke) => ({
     ...stroke,
     points: stroke.points.map((point) => ({ ...point })),
   }));
+}
+
+function isThoughtNote(value: unknown): value is ThoughtNote {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const thought = value as ThoughtNote;
+
+  return (
+    typeof thought.id === 'string' &&
+    typeof thought.title === 'string' &&
+    (thought.body === undefined || typeof thought.body === 'string') &&
+    Array.isArray(thought.strokes) &&
+    typeof thought.createdAt === 'number'
+  );
+}
+
+function parseStoredThoughts(raw: string) {
+  const parsed = JSON.parse(raw) as unknown;
+
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+
+  return parsed.filter(isThoughtNote);
+}
+
+async function persistThoughts() {
+  await AsyncStorage.setItem(THOUGHTS_STORAGE_KEY, JSON.stringify(savedThoughts));
+}
+
+export async function hydrateThoughts() {
+  if (!hydratePromise) {
+    hydratePromise = (async () => {
+      const raw = await AsyncStorage.getItem(THOUGHTS_STORAGE_KEY);
+
+      if (!raw) {
+        return;
+      }
+
+      try {
+        savedThoughts = parseStoredThoughts(raw);
+      } catch {
+        savedThoughts = [];
+      }
+    })();
+  }
+
+  return hydratePromise;
+}
+
+export function saveDoodle(strokes: DoodleStroke[]) {
+  currentDoodle = cloneStrokes(strokes);
 }
 
 export function saveThoughtDraft(draft: ThoughtDraft) {
@@ -40,29 +100,52 @@ export function saveThoughtDraft(draft: ThoughtDraft) {
   };
 }
 
+function resolveCreatedAtTimestamp() {
+  if (pendingThoughtCreatedAt == null) {
+    return Date.now();
+  }
+
+  const targetDate = new Date(pendingThoughtCreatedAt);
+  const now = new Date();
+
+  return new Date(
+    targetDate.getFullYear(),
+    targetDate.getMonth(),
+    targetDate.getDate(),
+    now.getHours(),
+    now.getMinutes(),
+    now.getSeconds(),
+    now.getMilliseconds(),
+  ).getTime();
+}
+
+export function setPendingThoughtDate(date: Date | null) {
+  pendingThoughtCreatedAt = date ? date.getTime() : null;
+}
+
+export function clearPendingThoughtDate() {
+  pendingThoughtCreatedAt = null;
+}
+
 export function addSavedThought(strokes: DoodleStroke[]) {
   if (!pendingThought) {
     return;
   }
 
-  const now = Date.now();
+  const createdAt = resolveCreatedAtTimestamp();
   const nextThought: ThoughtNote = {
-    id: String(now),
+    id: String(Date.now()),
     title: pendingThought.title,
     body: pendingThought.body,
-    strokes: strokes.map((stroke) => ({
-      ...stroke,
-      points: stroke.points.map((point) => ({ ...point })),
-    })),
-    createdAt: now,
+    strokes: cloneStrokes(strokes),
+    createdAt,
   };
 
   savedThoughts = [nextThought, ...savedThoughts];
-  currentDoodle = nextThought.strokes.map((stroke) => ({
-    ...stroke,
-    points: stroke.points.map((point) => ({ ...point })),
-  }));
+  currentDoodle = cloneStrokes(nextThought.strokes);
   pendingThought = null;
+  pendingThoughtCreatedAt = null;
+  void persistThoughts();
 }
 
 export function readThoughts() {
@@ -80,6 +163,7 @@ export function readThoughts() {
 
 export function deleteThought(id: string) {
   savedThoughts = savedThoughts.filter((thought) => thought.id !== id);
+  void persistThoughts();
 }
 
 export function updateThoughtStrokes(id: string, strokes: DoodleStroke[]) {
@@ -87,13 +171,11 @@ export function updateThoughtStrokes(id: string, strokes: DoodleStroke[]) {
     thought.id === id
       ? {
           ...thought,
-          strokes: strokes.map((stroke) => ({
-            ...stroke,
-            points: stroke.points.map((point) => ({ ...point })),
-          })),
+          strokes: cloneStrokes(strokes),
         }
       : thought,
   );
+  void persistThoughts();
 }
 
 export function updateThoughtText(id: string, title: string, body?: string) {
@@ -106,6 +188,7 @@ export function updateThoughtText(id: string, title: string, body?: string) {
         }
       : thought,
   );
+  void persistThoughts();
 }
 
 export function readPendingThought() {

@@ -460,10 +460,18 @@ export default function ThoughtDetailScreen() {
             </Pressable>
           </View>
         ) : (
-          <Pressable accessibilityRole="button" accessibilityLabel="Edit thought" onPress={handleEdit} style={[styles.floatingEditButton, { bottom: 32 + keyboardOffset }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Edit thought"
+            onPress={handleEdit}
+            style={({ pressed }) => [
+              styles.floatingEditButton,
+              { bottom: 24 + keyboardOffset },
+              pressed && styles.floatingEditButtonPressed,
+            ]}>
             <View style={styles.flippedPencilWrap}>
               <View style={styles.editPencilIconWrap}>
-                <PencilIcon width={24.39} height={24.39} color={COLORS.white} />
+                <PencilIcon width={28} height={28} color={COLORS.white} />
               </View>
             </View>
           </Pressable>
@@ -679,18 +687,22 @@ const styles = StyleSheet.create({
   },
   floatingEditButton: {
     position: 'absolute',
-    right: 32,
-    width: 80,
-    height: 72,
+    right: 24,
+    width: 56,
+    height: 56,
     backgroundColor: COLORS.mainBlue,
-    borderRadius: 23,
+    borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: COLORS.black,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 19.4,
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
     elevation: 8,
+  },
+  floatingEditButtonPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.96 }],
   },
   flippedPencilWrap: {
     transform: [{ scaleX: -1 }],
