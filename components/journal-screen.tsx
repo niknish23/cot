@@ -13,7 +13,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DoodlePreview } from '@/components/doodle-preview';
 import { BackButtonIcon } from '@/components/icons/back-button-icon';
@@ -25,6 +25,7 @@ import { NoThoughtsIcon } from '@/components/icons/no-thoughts-icon';
 import { PlusIcon } from '@/components/icons/plus-icon';
 import { SearchIcon } from '@/components/icons/search-icon';
 import { clearPendingThoughtDate, hydrateThoughts, readThoughts, setPendingThoughtDate, type ThoughtNote } from '@/lib/doodle-store';
+import { useResponsiveLayout } from '@/lib/responsive-layout';
 
 const COLORS = {
   white: '#FFFFFF',
@@ -405,11 +406,9 @@ function ThoughtCardItem({
   );
 }
 
-function EmptyThoughtsState() {
-  const { width } = useWindowDimensions();
-  const layoutScale = width / 393;
-  const artTop = (269.12 - 104) * layoutScale;
-  const textGap = (394.5 - (269.12 + 107)) * layoutScale;
+function EmptyThoughtsState({ scale }: { scale: number }) {
+  const artTop = (269.12 - 104) * scale;
+  const textGap = (394.5 - (269.12 + 107)) * scale;
 
   return (
     <View style={[styles.emptyStateContainer, { paddingTop: artTop }]}>
@@ -418,8 +417,8 @@ function EmptyThoughtsState() {
       </View>
 
       <View style={[styles.emptyMessage, { marginTop: textGap }]}>
-        <Text style={styles.emptyTitle}>No thoughts...</Text>
-        <Text style={styles.emptySubtitle}>Start a new thought!</Text>
+        <Text style={[styles.emptyTitle, { fontSize: 26 * scale, lineHeight: 31.2 * scale }]}>No thoughts...</Text>
+        <Text style={[styles.emptySubtitle, { fontSize: 16 * scale, lineHeight: 19.2 * scale }]}>Start a new thought!</Text>
       </View>
     </View>
   );
@@ -497,11 +496,13 @@ function BottomNavButton({
   variant,
   onPress,
   active = false,
+  scale = 1,
   children,
 }: {
   variant: 'chat' | 'add' | 'profile';
   onPress: () => void;
   active?: boolean;
+  scale?: number;
   children: ReactNode;
 }) {
   return (
@@ -511,7 +512,7 @@ function BottomNavButton({
       style={({ pressed }) => [
         styles.navButton,
         active && styles.navButtonActive,
-        variant === 'add' && styles.navButtonAdd,
+        variant === 'add' && [styles.navButtonAdd, { borderRadius: 23 * scale }],
         pressed && styles.navButtonPressed,
       ]}>
       {children}
@@ -524,18 +525,22 @@ function ThoughtsGridPane({
   onCardPress,
   emptyTitle,
   emptySubtitle,
+  horizontalPadding,
+  bottomContentPadding,
 }: {
   notes: ThoughtNote[];
   onCardPress: (id: string) => void;
   emptyTitle: string;
   emptySubtitle: string;
+  horizontalPadding: number;
+  bottomContentPadding: number;
 }) {
   if (notes.length === 0) {
     return (
       <View style={styles.pane}>
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.emptyScrollContent}
+          contentContainerStyle={[styles.emptyScrollContent, { paddingBottom: bottomContentPadding }]}
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}>
           <View style={styles.searchEmptyStateContainer}>
@@ -551,7 +556,10 @@ function ThoughtsGridPane({
     <View style={styles.pane}>
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingHorizontal: horizontalPadding, paddingBottom: bottomContentPadding },
+        ]}
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}>
         <View style={styles.grid}>
@@ -575,16 +583,28 @@ function ThoughtsGridPane({
   );
 }
 
-function ChatPane({ notes, onCardPress }: { notes: ThoughtNote[]; onCardPress: (id: string) => void }) {
+function ChatPane({
+  notes,
+  onCardPress,
+  scale,
+  horizontalPadding,
+  bottomContentPadding,
+}: {
+  notes: ThoughtNote[];
+  onCardPress: (id: string) => void;
+  scale: number;
+  horizontalPadding: number;
+  bottomContentPadding: number;
+}) {
   if (notes.length === 0) {
     return (
       <View style={styles.pane}>
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.emptyScrollContent}
+          contentContainerStyle={[styles.emptyScrollContent, { paddingBottom: bottomContentPadding }]}
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}>
-          <EmptyThoughtsState />
+          <EmptyThoughtsState scale={scale} />
         </ScrollView>
       </View>
     );
@@ -596,6 +616,8 @@ function ChatPane({ notes, onCardPress }: { notes: ThoughtNote[]; onCardPress: (
       onCardPress={onCardPress}
       emptyTitle="No thoughts..."
       emptySubtitle="Start a new thought!"
+      horizontalPadding={horizontalPadding}
+      bottomContentPadding={bottomContentPadding}
     />
   );
 }
@@ -604,10 +626,14 @@ function DiaryPane({
   notes,
   active,
   onDayPress,
+  horizontalPadding,
+  bottomContentPadding,
 }: {
   notes: ThoughtNote[];
   active: boolean;
   onDayPress: (date: Date, dayNotes: ThoughtNote[]) => void;
+  horizontalPadding: number;
+  bottomContentPadding: number;
 }) {
   const months = useMemo(() => buildCalendarMonths(notes, 2026), [notes]);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -641,7 +667,10 @@ function DiaryPane({
       <ScrollView
         ref={scrollViewRef}
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingHorizontal: horizontalPadding, paddingBottom: bottomContentPadding },
+        ]}
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}>
         <View style={styles.calendarCard}>
@@ -668,7 +697,8 @@ function DiaryPane({
 
 export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: JournalTab; onThoughtPress?: (id: string) => void }) {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const layout = useResponsiveLayout();
+  const { insets, scale, bottomNavOffset, bottomContentPadding, horizontalPadding, headerHeight, contentMaxWidth } = layout;
   const [activeTab, setActiveTab] = useState<JournalTab>(initialTab);
   const [contentWidth, setContentWidth] = useState(0);
   const [barWidth, setBarWidth] = useState(0);
@@ -797,8 +827,8 @@ export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: Jour
     }
 
     const targetContentX = activeTab === 'chat' ? 0 : -contentWidth;
-    const segmentWidth = (barWidth - 24 - 22) / 3;
-    const targetOverlayX = activeTab === 'chat' ? 0 : (segmentWidth + 11) * 2;
+    const segmentWidth = (barWidth - 24 * scale - 22 * scale) / 3;
+    const targetOverlayX = activeTab === 'chat' ? 0 : (segmentWidth + 11 * scale) * 2;
 
     Animated.parallel([
       Animated.timing(contentTranslateX, {
@@ -814,9 +844,9 @@ export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: Jour
         useNativeDriver: true,
       }),
     ]).start();
-  }, [activeTab, barWidth, contentTranslateX, contentWidth, overlayX]);
+  }, [activeTab, barWidth, contentTranslateX, contentWidth, overlayX, scale]);
 
-  const segmentWidth = barWidth ? (barWidth - 24 - 22) / 3 : 0;
+  const segmentWidth = barWidth ? (barWidth - 24 * scale - 22 * scale) / 3 : 0;
 
   const handleDiaryDayPress = useCallback((date: Date, dayNotes: ThoughtNote[]) => {
     setSelectedDiaryDay({
@@ -842,12 +872,14 @@ export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: Jour
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <View style={styles.headerShell}>
+        <View style={[styles.headerShell, { height: headerHeight }]}>
           <Animated.View
             pointerEvents={searchMode ? 'none' : 'auto'}
             style={[
               styles.header,
               {
+                paddingHorizontal: horizontalPadding,
+                paddingVertical: 12 * scale,
                 opacity: searchTransition.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
                 transform: [
                   {
@@ -875,6 +907,8 @@ export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: Jour
               styles.header,
               styles.headerSearchSnippet,
               {
+                paddingHorizontal: horizontalPadding,
+                paddingVertical: 12 * scale,
                 opacity: searchTransition,
                 transform: [
                   {
@@ -923,7 +957,7 @@ export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: Jour
         </View>
 
         <View
-          style={styles.contentViewport}
+          style={[styles.contentViewport, { maxWidth: contentMaxWidth, alignSelf: 'center', width: '100%' }]}
           onLayout={(event) => {
             const width = event.nativeEvent.layout.width;
             if (width !== contentWidth) {
@@ -936,6 +970,8 @@ export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: Jour
               onCardPress={onThoughtPress ?? (() => {})}
               emptyTitle="No matching thoughts"
               emptySubtitle="Try a keyword or a date like 3/12/2026"
+              horizontalPadding={horizontalPadding}
+              bottomContentPadding={bottomContentPadding}
             />
           ) : (
             <Animated.View
@@ -946,16 +982,37 @@ export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: Jour
                   transform: [{ translateX: contentTranslateX }],
                 },
               ]}>
-              <ChatPane notes={notes} onCardPress={onThoughtPress ?? (() => {})} />
-              <DiaryPane notes={notes} active={activeTab === 'diary'} onDayPress={handleDiaryDayPress} />
+              <ChatPane
+                notes={notes}
+                onCardPress={onThoughtPress ?? (() => {})}
+                scale={scale}
+                horizontalPadding={horizontalPadding}
+                bottomContentPadding={bottomContentPadding}
+              />
+              <DiaryPane
+                notes={notes}
+                active={activeTab === 'diary'}
+                onDayPress={handleDiaryDayPress}
+                horizontalPadding={horizontalPadding}
+                bottomContentPadding={bottomContentPadding}
+              />
             </Animated.View>
           )}
         </View>
       </SafeAreaView>
 
-      <View style={styles.bottomBarWrapper}>
+      <View style={[styles.bottomBarWrapper, { bottom: bottomNavOffset, paddingHorizontal: 53 * scale }]}>
         <View
-          style={styles.bottomBar}
+          style={[
+            styles.bottomBar,
+            {
+              maxWidth: 287 * scale,
+              height: 79 * scale,
+              padding: 12 * scale,
+              gap: 11 * scale,
+              borderRadius: 34 * scale,
+            },
+          ]}
           onLayout={(event) => {
             const width = event.nativeEvent.layout.width;
             if (width !== barWidth) {
@@ -969,31 +1026,36 @@ export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: Jour
                 styles.navButtonOverlay,
                 {
                   width: segmentWidth,
+                  left: 12 * scale,
+                  top: 12 * scale,
+                  bottom: 12 * scale,
+                  borderRadius: 22 * scale,
                   transform: [{ translateX: overlayX }],
                 },
               ]}
             />
           ) : null}
-          <BottomNavButton variant="chat" active={activeTab === 'chat'} onPress={() => setActiveTab('chat')}>
-            <ChatIcon />
+          <BottomNavButton variant="chat" active={activeTab === 'chat'} scale={scale} onPress={() => setActiveTab('chat')}>
+            <ChatIcon width={32 * scale} height={32 * scale} />
           </BottomNavButton>
           <BottomNavButton
             variant="add"
+            scale={scale}
             onPress={() => {
               clearPendingThoughtDate();
               router.push('/new-thought');
             }}>
-            <PlusIcon />
+            <PlusIcon width={32 * scale} height={32 * scale} />
           </BottomNavButton>
-          <BottomNavButton variant="profile" active={activeTab === 'diary'} onPress={() => setActiveTab('diary')}>
-            <DiaryIcon />
+          <BottomNavButton variant="profile" active={activeTab === 'diary'} scale={scale} onPress={() => setActiveTab('diary')}>
+            <DiaryIcon width={32 * scale} height={32 * scale} />
           </BottomNavButton>
         </View>
       </View>
 
       {searchMode && normalizedSearchQuery.length === 0 ? (
         <Pressable
-          style={[styles.searchDismissOverlay, { top: insets.top + 53 }]}
+          style={[styles.searchDismissOverlay, { top: insets.top + headerHeight }]}
           onPress={() => {
             closeSearchToChat();
           }}
@@ -1002,7 +1064,7 @@ export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: Jour
 
       {selectedDiaryDay ? (
         <DayThoughtsSheet
-          bottomInset={insets.bottom}
+          bottomInset={insets.bottom + 10}
           date={selectedDiaryDay.date}
           notes={selectedDiaryDay.notes}
           onAddThought={handleAddThoughtForDay}
@@ -1023,7 +1085,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerShell: {
-    height: 53,
     zIndex: 30,
     backgroundColor: COLORS.white,
     overflow: 'hidden',
@@ -1034,8 +1095,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 32,
-    paddingVertical: 12,
   },
   headerSearchSnippet: {
     position: 'absolute',
@@ -1347,20 +1406,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 28,
     alignItems: 'center',
-    paddingHorizontal: 53,
   },
   bottomBar: {
     width: '100%',
-    maxWidth: 287,
-    height: 79,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 11,
-    padding: 12,
     backgroundColor: COLORS.white,
-    borderRadius: 34,
     shadowColor: COLORS.black,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,

@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { OnboardingAnimation } from '@/components/onboarding-animation';
 import {
   getSlideUpWordsDuration,
   OnboardingSlideUpWords,
 } from '@/components/onboarding-slide-up-words';
+import {
+  getOnboardingButtonWidth,
+  ONBOARDING_LAYOUT,
+  useOnboardingLayoutMetrics,
+} from '@/lib/onboarding-layout';
 
 const COLORS = {
   white: '#FFFFFF',
@@ -14,8 +19,6 @@ const COLORS = {
   tagline: 'rgba(0, 0, 0, 0.20)',
 };
 
-const BASE_WIDTH = 390;
-const BASE_HEIGHT = 844;
 const TEXT_START_DELAY_MS = 2500;
 const TAGLINE_DELAY_AFTER_WELCOME_MS = 300;
 const BUTTON_OFFSET_Y = 10;
@@ -32,8 +35,7 @@ type OnboardingFirstScreenProps = {
 };
 
 export function OnboardingFirstScreen({ onContinue }: OnboardingFirstScreenProps) {
-  const { width, height } = useWindowDimensions();
-  const scale = Math.min(width / BASE_WIDTH, height / BASE_HEIGHT);
+  const metrics = useOnboardingLayoutMetrics();
   const buttonOpacity = useRef(new Animated.Value(0)).current;
   const buttonTranslateY = useRef(new Animated.Value(BUTTON_OFFSET_Y)).current;
   const [showTagline, setShowTagline] = useState(false);
@@ -41,18 +43,23 @@ export function OnboardingFirstScreen({ onContinue }: OnboardingFirstScreenProps
 
   const layout = useMemo(
     () => ({
-      heroTop: 276 * scale,
-      welcomeSize: 18.74 * scale,
-      animationWidth: BRAND_ANIMATION_BASE_WIDTH * INTRO_ANIMATION_SCALE * scale,
-      animationHeight: BRAND_ANIMATION_BASE_HEIGHT * INTRO_ANIMATION_SCALE * scale,
-      taglineSize: 12 * scale,
-      taglineGap: 10 * scale,
-      buttonLeft: 32 * scale,
-      buttonTop: 674 * scale,
-      buttonWidth: 329 * scale,
-      buttonHeight: 59 * scale,
+      welcomeSize: metrics.s(18.74),
+      animationWidth: metrics.h(BRAND_ANIMATION_BASE_WIDTH * INTRO_ANIMATION_SCALE),
+      animationHeight: metrics.v(BRAND_ANIMATION_BASE_HEIGHT * INTRO_ANIMATION_SCALE),
+      taglineSize: metrics.s(12),
+      taglineGap: metrics.v(ONBOARDING_LAYOUT.animationToTaglineGap),
+      animationGap: metrics.v(ONBOARDING_LAYOUT.welcomeToAnimationGap),
+      buttonWidth: getOnboardingButtonWidth(metrics),
+      buttonHeight: metrics.v(ONBOARDING_LAYOUT.buttonHeight),
+      buttonRadius: metrics.s(18),
+      topSpacerFlex: ONBOARDING_LAYOUT.welcomeHeroY,
+      middleSpacerFlex:
+        ONBOARDING_LAYOUT.buttonY -
+        ONBOARDING_LAYOUT.welcomeHeroY -
+        ONBOARDING_LAYOUT.heroContentHeight,
+      bottomSpacerFlex: ONBOARDING_LAYOUT.bottomBelowButton,
     }),
-    [scale],
+    [metrics],
   );
 
   const welcomeDurationMs = getSlideUpWordsDuration(WELCOME_TEXT.trim().split(/\s+/).length);
@@ -102,7 +109,9 @@ export function OnboardingFirstScreen({ onContinue }: OnboardingFirstScreenProps
 
   return (
     <View style={styles.container}>
-      <View style={[styles.heroSection, { top: layout.heroTop }]}>
+      <View style={{ flex: layout.topSpacerFlex }} />
+
+      <View style={styles.heroSection}>
         <OnboardingSlideUpWords
           startDelay={TEXT_START_DELAY_MS}
           style={styles.welcomeRow}
@@ -116,7 +125,7 @@ export function OnboardingFirstScreen({ onContinue }: OnboardingFirstScreenProps
             {
               width: layout.animationWidth,
               height: layout.animationHeight,
-              marginTop: -2 * scale,
+              marginTop: layout.animationGap,
             },
           ]}>
           <OnboardingAnimation
@@ -137,23 +146,34 @@ export function OnboardingFirstScreen({ onContinue }: OnboardingFirstScreenProps
         ) : null}
       </View>
 
+      <View style={{ flex: layout.middleSpacerFlex }} />
+
       <Animated.View
         pointerEvents={showButton ? 'auto' : 'none'}
         style={[
           styles.buttonWrap,
           {
-            left: layout.buttonLeft,
-            top: layout.buttonTop,
-            width: layout.buttonWidth,
-            height: layout.buttonHeight,
             opacity: buttonOpacity,
             transform: [{ translateY: buttonTranslateY }],
           },
         ]}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Hi there" onPress={onContinue} style={styles.button}>
-          <Text style={[styles.buttonText, { fontSize: 16 * scale }]}>Hi there!</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Hi there"
+          onPress={onContinue}
+          style={[
+            styles.button,
+            {
+              width: layout.buttonWidth,
+              height: layout.buttonHeight,
+              borderRadius: layout.buttonRadius,
+            },
+          ]}>
+          <Text style={[styles.buttonText, { fontSize: metrics.s(16) }]}>Hi there!</Text>
         </Pressable>
       </Animated.View>
+
+      <View style={{ flex: layout.bottomSpacerFlex }} />
     </View>
   );
 }
@@ -166,9 +186,6 @@ const styles = StyleSheet.create({
     borderRadius: 39,
   },
   heroSection: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
     alignItems: 'center',
   },
   welcomeRow: {
@@ -197,12 +214,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   buttonWrap: {
-    position: 'absolute',
+    alignItems: 'center',
   },
   button: {
-    flex: 1,
     backgroundColor: COLORS.mainBlue,
-    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },

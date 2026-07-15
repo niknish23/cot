@@ -12,6 +12,13 @@ import { DiaryIcon } from '@/components/icons/diary-icon';
 import { FlowerIcon } from '@/components/icons/flower-icon';
 import { PencilIcon } from '@/components/icons/pencil-icon';
 import { ONBOARDING_SLIDES, type OnboardingSlide } from '@/constants/onboarding-slides';
+import {
+  getOnboardingButtonWidth,
+  getOnboardingContentLeft,
+  getSlideIllustrationLayout,
+  ONBOARDING_LAYOUT,
+  useOnboardingLayoutMetrics,
+} from '@/lib/onboarding-layout';
 
 const COLORS = {
   white: '#FFFFFF',
@@ -20,17 +27,7 @@ const COLORS = {
   lightGray: '#E1E1E1',
 };
 
-const ANIMATION_GAP_ABOVE_TITLE = 10;
-const BASE_WIDTH = 390;
-const BASE_HEIGHT = 844;
 const DEFAULT_ANIMATION_ASPECT_RATIO = 445 / 393;
-
-type IllustrationLayout = {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-};
 
 type OnboardingSecondScreenProps = {
   onComplete: () => void;
@@ -41,32 +38,10 @@ function getSlideAspectRatio(slide: OnboardingSlide) {
   return 'animationAspectRatio' in slide ? slide.animationAspectRatio : DEFAULT_ANIMATION_ASPECT_RATIO;
 }
 
-function getSlideIllustrationLayout(
-  slide: OnboardingSlide,
-  width: number,
-  scale: number,
-  aspectRatio: number,
-): IllustrationLayout {
-  const horizontalInset = ('illustrationHorizontalInset' in slide ? slide.illustrationHorizontalInset : 0) * scale;
-  const illustrationWidth = width - horizontalInset * 2;
-  const illustrationHeight = illustrationWidth * aspectRatio;
-  const animationGapAboveTitle =
-    ('animationGapAboveTitle' in slide ? slide.animationGapAboveTitle : ANIMATION_GAP_ABOVE_TITLE) * scale;
-  const illustrationTopOffset = ('illustrationTopOffset' in slide ? slide.illustrationTopOffset : 0) * scale;
-  const contentTop = 502 * scale;
-
-  return {
-    left: horizontalInset,
-    top: contentTop - animationGapAboveTitle - illustrationHeight + illustrationTopOffset,
-    width: illustrationWidth,
-    height: illustrationHeight,
-  };
-}
-
-function getIcon(iconName: OnboardingSlide['iconName'], mirrored = false) {
+function getIcon(iconName: OnboardingSlide['iconName'], mirrored = false, size = 32) {
   switch (iconName) {
     case 'chat':
-      return <ChatIcon width={32} height={32} />;
+      return <ChatIcon width={size} height={size} />;
     case 'pencil':
       return (
         <View style={mirrored ? styles.mirroredIcon : undefined}>
@@ -76,9 +51,9 @@ function getIcon(iconName: OnboardingSlide['iconName'], mirrored = false) {
     case 'flower':
       return <FlowerIcon />;
     case 'diary':
-      return <DiaryIcon width={32} height={32} />;
+      return <DiaryIcon width={size} height={size} />;
     default:
-      return <ChatIcon width={32} height={32} />;
+      return <ChatIcon width={size} height={size} />;
   }
 }
 
@@ -87,7 +62,7 @@ function renderSlideMedia(
   onAspectRatio: (aspectRatio: number) => void,
 ) {
   if ('gifSource' in slide && 'gifDurationMs' in slide) {
-    return <OnboardingGif source={slide.gifSource} durationMs={slide.gifDurationMs} style={styles.image} />;
+    return <OnboardingGif source={slide.gifSource} durationMs={slide.gifDurationMs} />;
   }
 
   if ('animationSource' in slide) {
@@ -111,9 +86,8 @@ type SlideGraphicProps = {
 };
 
 function CarouselSlideGraphic({ slide, width, viewportTop }: SlideGraphicProps) {
-  const { height } = useWindowDimensions();
-  const scale = Math.min(width / BASE_WIDTH, height / BASE_HEIGHT);
-  const layout = getSlideIllustrationLayout(slide, width, scale, getSlideAspectRatio(slide));
+  const metrics = useOnboardingLayoutMetrics();
+  const layout = getSlideIllustrationLayout(slide, metrics, getSlideAspectRatio(slide));
 
   return (
     <View style={[styles.graphicPage, { width }]}>
@@ -139,11 +113,10 @@ function ActiveSlideGraphic({
   viewportTop,
   playKey,
 }: SlideGraphicProps & { playKey: number }) {
-  const { height } = useWindowDimensions();
-  const scale = Math.min(width / BASE_WIDTH, height / BASE_HEIGHT);
+  const metrics = useOnboardingLayoutMetrics();
   const aspectRatio = getSlideAspectRatio(slide);
   const [resolvedAspectRatio, setResolvedAspectRatio] = useState(aspectRatio);
-  const layout = getSlideIllustrationLayout(slide, width, scale, resolvedAspectRatio);
+  const layout = getSlideIllustrationLayout(slide, metrics, resolvedAspectRatio);
 
   useEffect(() => {
     setResolvedAspectRatio(aspectRatio);
@@ -169,8 +142,8 @@ function ActiveSlideGraphic({
 }
 
 export function OnboardingSecondScreen({ onComplete, onSkip }: OnboardingSecondScreenProps) {
-  const { width, height } = useWindowDimensions();
-  const scale = Math.min(width / BASE_WIDTH, height / BASE_HEIGHT);
+  const { width } = useWindowDimensions();
+  const metrics = useOnboardingLayoutMetrics();
   const slideProgress = useRef(new Animated.Value(0)).current;
   const iconOpacity = useRef(new Animated.Value(1)).current;
 
@@ -188,7 +161,7 @@ export function OnboardingSecondScreen({ onComplete, onSkip }: OnboardingSecondS
     let maxBottom = 0;
 
     for (const slide of ONBOARDING_SLIDES) {
-      const layout = getSlideIllustrationLayout(slide, width, scale, getSlideAspectRatio(slide));
+      const layout = getSlideIllustrationLayout(slide, metrics, getSlideAspectRatio(slide));
       minTop = Math.min(minTop, layout.top);
       maxBottom = Math.max(maxBottom, layout.top + layout.height);
     }
@@ -197,23 +170,29 @@ export function OnboardingSecondScreen({ onComplete, onSkip }: OnboardingSecondS
       top: minTop,
       height: maxBottom - minTop,
     };
-  }, [scale, width]);
+  }, [metrics]);
 
   const layout = useMemo(
     () => ({
-      paginationTop: 56 * scale,
+      paginationTop: metrics.y(ONBOARDING_LAYOUT.paginationY),
       carouselTop: illustrationViewport.top,
       carouselHeight: illustrationViewport.height,
-      contentLeft: 32 * scale,
-      contentTop: 502 * scale,
-      contentWidth: 329 * scale,
-      buttonLeft: 32 * scale,
-      buttonTop: 674 * scale,
-      buttonWidth: 329 * scale,
-      buttonHeight: 59 * scale,
-      skipTop: 763 * scale,
+      contentLeft: getOnboardingContentLeft(metrics),
+      contentTop: metrics.y(ONBOARDING_LAYOUT.contentY),
+      contentWidth: metrics.h(ONBOARDING_LAYOUT.contentWidth),
+      contentGap: metrics.v(ONBOARDING_LAYOUT.contentBlockGap),
+      titleIconGap: metrics.v(ONBOARDING_LAYOUT.titleIconGap),
+      buttonTop: metrics.y(ONBOARDING_LAYOUT.buttonY),
+      buttonWidth: getOnboardingButtonWidth(metrics),
+      buttonHeight: metrics.v(ONBOARDING_LAYOUT.buttonHeight),
+      buttonRadius: metrics.s(38),
+      skipTop: metrics.y(ONBOARDING_LAYOUT.skipY),
+      iconSize: metrics.s(32),
+      titleSize: metrics.s(42),
+      subtitleSize: metrics.s(16),
+      subtitleMinHeight: metrics.v(44),
     }),
-    [illustrationViewport.height, illustrationViewport.top, scale],
+    [illustrationViewport.height, illustrationViewport.top, metrics],
   );
 
   const currentSlide = ONBOARDING_SLIDES[currentSlideIndex];
@@ -346,14 +325,16 @@ export function OnboardingSecondScreen({ onComplete, onSkip }: OnboardingSecondS
             left: layout.contentLeft,
             top: layout.contentTop,
             width: layout.contentWidth,
+            gap: layout.contentGap,
           },
         ]}
         pointerEvents="none">
-        <View style={styles.titleRow}>
-          <Animated.View style={[styles.iconWrap, { opacity: iconOpacity }]}>
+        <View style={[styles.titleRow, { gap: layout.titleIconGap }]}>
+          <Animated.View style={[styles.iconWrap, { opacity: iconOpacity, width: layout.iconSize, height: layout.iconSize }]}>
             {getIcon(
               displayedSlide.iconName,
               'iconMirrored' in displayedSlide ? displayedSlide.iconMirrored : false,
+              layout.iconSize,
             )}
           </Animated.View>
           <OnboardingFadeInText
@@ -362,7 +343,7 @@ export function OnboardingSecondScreen({ onComplete, onSkip }: OnboardingSecondS
               styles.title,
               styles.titleChar,
               {
-                fontSize: 42 * scale,
+                fontSize: layout.titleSize,
                 fontFamily: titleFontFamily,
                 fontWeight: '400',
               },
@@ -373,7 +354,7 @@ export function OnboardingSecondScreen({ onComplete, onSkip }: OnboardingSecondS
 
         <OnboardingFadeUpText
           animateKey={contentAnimateKey}
-          style={[styles.subtitle, { fontSize: 16 * scale }]}
+          style={[styles.subtitle, { fontSize: layout.subtitleSize, minHeight: layout.subtitleMinHeight }]}
           text={displayedSlide.subtitle}
         />
       </View>
@@ -382,10 +363,7 @@ export function OnboardingSecondScreen({ onComplete, onSkip }: OnboardingSecondS
         style={[
           styles.buttonWrap,
           {
-            left: layout.buttonLeft,
             top: layout.buttonTop,
-            width: layout.buttonWidth,
-            height: layout.buttonHeight,
           },
         ]}>
         <Pressable
@@ -393,8 +371,15 @@ export function OnboardingSecondScreen({ onComplete, onSkip }: OnboardingSecondS
           accessibilityLabel={displayedSlide.buttonLabel}
           disabled={isAnimating}
           onPress={handleContinue}
-          style={styles.button}>
-          <Text style={[styles.buttonText, { fontSize: 16 * scale }]}>{displayedSlide.buttonLabel}</Text>
+          style={[
+            styles.button,
+            {
+              width: layout.buttonWidth,
+              height: layout.buttonHeight,
+              borderRadius: layout.buttonRadius,
+            },
+          ]}>
+          <Text style={[styles.buttonText, { fontSize: metrics.s(16) }]}>{displayedSlide.buttonLabel}</Text>
         </Pressable>
       </View>
 
@@ -405,7 +390,7 @@ export function OnboardingSecondScreen({ onComplete, onSkip }: OnboardingSecondS
           disabled={isAnimating}
           onPress={handleSkip}
           style={[styles.skipButton, { top: layout.skipTop }]}>
-          <Text style={[styles.skipText, { fontSize: 16 * scale }]}>Skip</Text>
+          <Text style={[styles.skipText, { fontSize: metrics.s(16) }]}>Skip</Text>
         </Pressable>
       ) : null}
     </View>
@@ -446,7 +431,7 @@ const styles = StyleSheet.create({
   },
   graphicFrame: {
     position: 'absolute',
-    overflow: 'hidden',
+    backgroundColor: COLORS.white,
   },
   activeGraphicOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -454,10 +439,11 @@ const styles = StyleSheet.create({
   },
   activeGraphicFrame: {
     position: 'absolute',
-    overflow: 'hidden',
+    backgroundColor: COLORS.white,
   },
   activeGraphicContent: {
     flex: 1,
+    backgroundColor: COLORS.white,
   },
   animation: {
     width: '100%',
@@ -471,17 +457,13 @@ const styles = StyleSheet.create({
   contentBlock: {
     position: 'absolute',
     alignItems: 'flex-start',
-    gap: 20,
     zIndex: 10,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 15,
   },
   iconWrap: {
-    width: 32,
-    height: 32,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -499,17 +481,17 @@ const styles = StyleSheet.create({
     color: 'rgba(0, 0, 0, 0.80)',
     fontWeight: '400',
     textAlign: 'left',
-    minHeight: 44,
   },
   buttonWrap: {
     position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
     zIndex: 20,
     elevation: 20,
   },
   button: {
-    flex: 1,
     backgroundColor: COLORS.mainBlue,
-    borderRadius: 38,
     justifyContent: 'center',
     alignItems: 'center',
   },

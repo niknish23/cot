@@ -10,7 +10,7 @@ type OpacityKeyframeStep = {
   opacity: number;
 };
 
-function extractKeyframeBlocks(svgContent: string) {
+export function extractKeyframeBlocks(svgContent: string) {
   const blocks: Array<{ name: string; body: string }> = [];
   const marker = '@keyframes ';
   let searchFrom = 0;

@@ -7,6 +7,7 @@ import { OnboardingFirstScreen } from '@/components/onboarding-first-screen';
 import { OnboardingSecondScreen } from '@/components/onboarding-second-screen';
 import { DEV_FORCE_ONBOARDING } from '@/constants/dev';
 import { ONBOARDING_SLIDES } from '@/constants/onboarding-slides';
+import { loadSvgText } from '@/lib/load-svg-text';
 
 const ONBOARDING_COMPLETE_KEY = 'onboarding-complete-v4';
 const ONBOARDING_PROGRESS_KEY = 'onboarding-progress-v4';
@@ -22,19 +23,11 @@ function prefetchOnboardingAssets() {
     }
 
     if ('animationSource' in slide) {
-      const { uri } = Image.resolveAssetSource(slide.animationSource);
-
-      if (uri) {
-        void Image.prefetch(uri);
-      }
+      void loadSvgText(slide.animationSource).catch(() => undefined);
     }
   }
 
-  const { uri: introUri } = Image.resolveAssetSource(require('@/assets/animations/intro_an.svg'));
-
-  if (introUri) {
-    void Image.prefetch(introUri);
-  }
+  void loadSvgText(require('@/assets/animations/intro_an.svg')).catch(() => undefined);
 }
 
 export default function Index() {

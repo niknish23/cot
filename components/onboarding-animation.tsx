@@ -1,8 +1,20 @@
-import { useEffect, useState } from 'react';
-import { Image, StyleSheet, View, type ViewStyle } from 'react-native';
-import { WebView } from 'react-native-webview';
+import { Image } from 'expo-image';
+import { useCallback, useEffect, useState } from 'react';
+import { Platform, StyleSheet, View, type ViewStyle } from 'react-native';
+import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
-import { getAnimationAspectRatio, patchOnboardingAnimationFreezeLastFrame, patchOnboardingAnimationLoop } from '@/lib/onboarding-animation-patch';
+import { loadSvgText } from '@/lib/load-svg-text';
+import {
+  getAnimationAspectRatio,
+  patchOnboardingAnimationFreezeLastFrame,
+  patchOnboardingAnimationLoop,
+} from '@/lib/onboarding-animation-patch';
+import {
+  buildSvgWebViewHtml,
+  patchSvgForLegacyWebView,
+  shouldPreferLegacySvgPatch,
+  SVG_WEBVIEW_PROBE_SCRIPT,
+} from '@/lib/svg-compat';
 
 type OnboardingAnimationProps = {
   source: number;
@@ -12,6 +24,25 @@ type OnboardingAnimationProps = {
   skipLoopPatch?: boolean;
 };
 
+type RenderMode = 'webview' | 'static-image';
+
+function prepareSvgContent(
+  rawSvg: string,
+  {
+    freezeLastFrame,
+    skipLoopPatch,
+    forceLegacy,
+  }: {
+    freezeLastFrame: boolean;
+    skipLoopPatch: boolean;
+    forceLegacy: boolean;
+  },
+) {
+  const loopPatched = skipLoopPatch ? rawSvg : patchOnboardingAnimationLoop(rawSvg);
+  const framePatched = freezeLastFrame ? patchOnboardingAnimationFreezeLastFrame(loopPatched) : loopPatched;
+  return forceLegacy ? patchSvgForLegacyWebView(framePatched) : framePatched;
+}
+
 export function OnboardingAnimation({
   source,
   style,
@@ -19,50 +50,79 @@ export function OnboardingAnimation({
   freezeLastFrame = false,
   skipLoopPatch = false,
 }: OnboardingAnimationProps) {
+  const [rawSvg, setRawSvg] = useState<string | null>(null);
   const [html, setHtml] = useState<string | null>(null);
+  const [renderMode, setRenderMode] = useState<RenderMode>('webview');
+  const [forceLegacy, setForceLegacy] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadAnimation = async () => {
-      const { uri } = Image.resolveAssetSource(source);
+      setRenderMode('webview');
+      setRawSvg(null);
+      setHtml(null);
 
-      if (!uri) {
-        return;
+      try {
+        const svgText = await loadSvgText(source);
+
+        if (cancelled) {
+          return;
+        }
+
+        setRawSvg(svgText);
+        onAspectRatio?.(getAnimationAspectRatio(svgText));
+        setForceLegacy(shouldPreferLegacySvgPatch(svgText));
+      } catch {
+        if (!cancelled) {
+          setRenderMode('static-image');
+        }
       }
-
-      const response = await fetch(uri);
-      const rawSvg = await response.text();
-      const aspectRatio = getAnimationAspectRatio(rawSvg);
-      onAspectRatio?.(aspectRatio);
-
-      const svgContent = skipLoopPatch ? rawSvg : patchOnboardingAnimationLoop(rawSvg);
-      const finalSvg = freezeLastFrame ? patchOnboardingAnimationFreezeLastFrame(svgContent) : svgContent;
-
-      setHtml(`<!DOCTYPE html>
-<html>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-    <style>
-      html, body {
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-        background: transparent;
-        width: 100%;
-        height: 100%;
-      }
-      svg {
-        width: 100%;
-        height: 100%;
-        display: block;
-      }
-    </style>
-  </head>
-  <body>${finalSvg}</body>
-</html>`);
     };
 
     void loadAnimation();
-  }, [freezeLastFrame, onAspectRatio, skipLoopPatch, source]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onAspectRatio, source]);
+
+  useEffect(() => {
+    if (!rawSvg) {
+      return;
+    }
+
+    const svgContent = prepareSvgContent(rawSvg, {
+      freezeLastFrame,
+      skipLoopPatch,
+      forceLegacy,
+    });
+
+    setHtml(buildSvgWebViewHtml(svgContent));
+  }, [forceLegacy, freezeLastFrame, rawSvg, skipLoopPatch]);
+
+  const handleWebViewMessage = useCallback((event: WebViewMessageEvent) => {
+    if (event.nativeEvent.data === 'offset-unsupported') {
+      setForceLegacy(true);
+      return;
+    }
+
+    if (event.nativeEvent.data === 'svg-missing') {
+      setRenderMode('static-image');
+    }
+  }, []);
+
+  const handleWebViewError = useCallback(() => {
+    setRenderMode('static-image');
+  }, []);
+
+  if (renderMode === 'static-image') {
+    return (
+      <View style={[styles.placeholder, style]}>
+        <Image source={source} style={styles.staticImage} contentFit="contain" />
+      </View>
+    );
+  }
 
   if (!html) {
     return <View style={[styles.placeholder, style]} />;
@@ -77,6 +137,17 @@ export function OnboardingAnimation({
       showsHorizontalScrollIndicator={false}
       showsVerticalScrollIndicator={false}
       pointerEvents="none"
+      javaScriptEnabled
+      domStorageEnabled
+      allowFileAccess
+      allowUniversalAccessFromFileURLs={Platform.OS === 'android'}
+      mixedContentMode="always"
+      setBuiltInZoomControls={false}
+      androidLayerType="hardware"
+      onError={handleWebViewError}
+      onHttpError={handleWebViewError}
+      onMessage={handleWebViewMessage}
+      injectedJavaScript={SVG_WEBVIEW_PROBE_SCRIPT}
     />
   );
 }
@@ -84,8 +155,13 @@ export function OnboardingAnimation({
 const styles = StyleSheet.create({
   placeholder: {
     backgroundColor: 'transparent',
+    overflow: 'hidden',
   },
   webview: {
     backgroundColor: 'transparent',
+  },
+  staticImage: {
+    width: '100%',
+    height: '100%',
   },
 });
