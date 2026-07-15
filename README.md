@@ -1,50 +1,49 @@
-# Welcome to your Expo app 👋
+#  cot (collection of thoughts)
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+> A cozy, hyper-personalized digital sanctuary designed to turn daily mood logging and wellness tracking into a delightful habit. Built as an agile, 48-hour "vibe-code" design sprint.
 
-## Get started
+[![Figma to Code](https://img.shields.io/badge/Design-Figma%20to%20Code-blue?style=flat-square)](#-the-journey)
+[![Vibe Coding](https://img.shields.io/badge/Stack-GitHub%20Copilot-black?style=flat-square)](#-the-journey)
 
-1. Install dependencies
+**cot** acts as a dynamic holding ground for the mind. Moving away from the sterile, rigid tag-and-system requirements of traditional journaling tools, it focuses on reducing friction, encouraging thought incubation, and embracing the power of visual, non-verbal expression.
 
-   ```bash
-   npm install
-   ```
+[ View the Design Case Study](https://nikitanishiprava.framer.website/cot)
 
-2. Start the app
+---
 
-   ```bash
-   npx expo start
-   ```
+<img width="1494" height="784" alt="github" src="https://github.com/user-attachments/assets/447d17ed-7664-4632-9258-5d86587ab71c" />
 
-In the output, you'll find options to open the app in a
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+##  Key Features & User Flows
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+### → Two-Tier Visual Incubation
+The app leverages a card-based grid layout where thoughts evolve visually based on your depth of exploration:
+*   **Unexpanded Thoughts:** Displayed at the top as clean, muted gray cards to subtly represent fresh, unformed ideas.
+*   **Expanded Thoughts:** Automatically move to the bottom and receive a soothing blue overlay, visually signaling a settled, fully processed reflection.
 
-## Get a fresh project
+### → Quick Capture & Branching Paths
+Clicking the global `+` floating action button opens a minimalist text view to quickly jot down a thought title. From there, choose your path based on your current mental bandwidth:
+1.  **The Fast Path:** Tap the doodle icon to go straight to the drawing canvas, saving the thought instantly with a quick sketch signature.
+2.  **The Deep Path:** Tap the next icon to open the full body text editor to expand immediately, smoothly transitioning into the doodle canvas after writing.
 
-When you're ready, run:
+### → The Doodle Canvas
+A vast, borders-free canvas with stripped-back tools (Draw, Erase, Undo) ensures the non-verbal marking feels organic. It blends cognitive psychology principles—associating thoughts with visual imagery to improve how we process information—with a warm, safe aesthetic.
 
-```bash
-npm run reset-project
-```
+---
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## → Craft & Design Language
 
-## Learn more
+*   **Color Palette:** Built on soft, approachable neutrals paired with a high-contrast electric blue accent used for primary interactive elements, interactive ink, and completed entries.
+*   **Shape Language:** High-radius rounded corners give a safe, gentle, tactile notebook feel. Buttons feature textured, custom-doodled stroke boundaries alongside **12 custom-designed doodle icons**.
 
-To learn more about developing your project with Expo, look at the following resources:
+---
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## 🏁 The Journey (48-Hour Vibe-Code Sprint)
 
-## Join the community
+This application was designed and shipped end-to-end within a compressed 48-hour loop:
+> Idea → User Flows → Scope Definition → Figma UI Design → Asset Export → Copilot Ingestion → Screen Assembly → Core Logic Implementation → Transitions & Onboarding → GitHub Release
 
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+### 💡 Major Breakthroughs
+*   **Direct-to-Code Tokens:** Bridging the gap between UI and builder, utilizing high-radius design tokens and vector assets optimized for seamless code sandbox deployment.
+*   **Zero-Over-Prototyping:** By acting as both designer and engineer, complex Figma prototyping nodes were swapped out for clear micro-interaction artboard annotations, serving as instant developer documentation for Copilot.
+*   **Prompt-Driven Logic:** Leveraging GitHub Copilot shifted programming from a syntax challenge into a fluid conversation about core state management and interaction logic.
