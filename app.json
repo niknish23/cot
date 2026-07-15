@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Cot",
-    "slug": "cot",
+    "slug": "my-awesome-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icons and svgs/main_app_icon.png",
