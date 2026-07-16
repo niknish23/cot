@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import Svg, { Path } from 'react-native-svg';
 
+import { DOODLE_ERASER_COLOR, getStrokeDisplayColor } from '@/constants/doodle';
 import type { DoodleStroke } from '@/lib/doodle-store';
 
 type DoodlePreviewProps = {
@@ -9,6 +10,7 @@ type DoodlePreviewProps = {
   height?: number;
   padding?: number;
   strokeColor?: string;
+  backgroundColor?: string;
 };
 
 type Bounds = {
@@ -53,7 +55,14 @@ function getBounds(strokes: DoodleStroke[]): Bounds | null {
   return { minX, minY, maxX, maxY };
 }
 
-export function DoodlePreview({ strokes, width = 117.37, height = 117.37, padding = 12, strokeColor }: DoodlePreviewProps) {
+export function DoodlePreview({
+  strokes,
+  width = 117.37,
+  height = 117.37,
+  padding = 12,
+  strokeColor,
+  backgroundColor = DOODLE_ERASER_COLOR,
+}: DoodlePreviewProps) {
   const layout = useMemo(() => {
     const bounds = getBounds(strokes);
 
@@ -92,7 +101,7 @@ export function DoodlePreview({ strokes, width = 117.37, height = 117.37, paddin
           <Path
             key={`${index}-${stroke.points.length}`}
             d={pointsToPath(translatedPoints)}
-            stroke={strokeColor ?? stroke.color}
+            stroke={getStrokeDisplayColor(stroke, backgroundColor, strokeColor)}
             strokeWidth={Math.max(stroke.width * scale, 1)}
             strokeLinecap="round"
             strokeLinejoin="round"

@@ -10,7 +10,15 @@ import { CheckMarkIcon } from '@/components/icons/check-mark-icon';
 import { DoodleEraserIcon } from '@/components/icons/doodle-eraser-icon';
 import { DoodlePencilIcon } from '@/components/icons/doodle-pencil-icon';
 import { UndoIcon } from '@/components/icons/undo-icon';
-import { DOODLE_COORDINATE_SIZE, DOODLE_ERASER_WIDTH, DOODLE_PEN_WIDTH } from '@/constants/doodle';
+import {
+  DOODLE_CANVAS_COLOR,
+  DOODLE_COORDINATE_SIZE,
+  DOODLE_ERASER_COLOR,
+  DOODLE_ERASER_WIDTH,
+  DOODLE_PEN_COLOR,
+  DOODLE_PEN_WIDTH,
+  getStrokeDisplayColor,
+} from '@/constants/doodle';
 import { addSavedThought, saveDoodle, type DoodleStroke } from '@/lib/doodle-store';
 
 type Tool = 'pen' | 'eraser';
@@ -20,7 +28,7 @@ type Point = {
   y: number;
 };
 
-const TOOL_BLUE = '#392EFF';
+const TOOL_BLUE = DOODLE_PEN_COLOR;
 const CANVAS_WIDTH = 353;
 const CANVAS_HEIGHT = 361;
 const CANVAS_LEFT = 20;
@@ -71,7 +79,7 @@ export default function DoodleScreen() {
 
           const nextStroke: DoodleStroke = {
             points: [clampPoint({ x: locationX * xScale, y: locationY * yScale })],
-            color: TOOL_BLUE,
+            color: tool === 'eraser' ? DOODLE_ERASER_COLOR : TOOL_BLUE,
             width: tool === 'eraser' ? DOODLE_ERASER_WIDTH : DOODLE_PEN_WIDTH,
           };
 
@@ -158,7 +166,7 @@ export default function DoodleScreen() {
               <Path
                 key={`${index}-${stroke.points.length}`}
                 d={buildPath(stroke)}
-                stroke={stroke.color}
+                stroke={getStrokeDisplayColor(stroke, DOODLE_CANVAS_COLOR)}
                 strokeWidth={stroke.width}
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -253,7 +261,7 @@ const styles = StyleSheet.create({
     top: 123.2,
     width: CANVAS_WIDTH,
     height: CANVAS_HEIGHT,
-    backgroundColor: '#F7F7F7',
+    backgroundColor: DOODLE_CANVAS_COLOR,
     overflow: 'hidden',
     borderRadius: 25,
   },
@@ -302,7 +310,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   segmentedToolRight: {
-    backgroundColor: '#DAE2FF',
+    backgroundColor: '#FFFFFF',
   },
   segmentedToolActive: {
     backgroundColor: '#DAE2FF',

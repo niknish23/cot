@@ -16,8 +16,9 @@ import { FlowerIcon } from '@/components/icons/flower-icon';
 import { MoreIcon } from '@/components/icons/more-icon';
 import { PencilIcon } from '@/components/icons/pencil-icon';
 import { RedoIcon } from '@/components/icons/redo-icon';
-import { DOODLE_COORDINATE_SIZE, DOODLE_ERASER_WIDTH, DOODLE_PEN_WIDTH } from '@/constants/doodle';
+import { DOODLE_COORDINATE_SIZE, DOODLE_ERASER_WIDTH, DOODLE_PEN_WIDTH, getStrokeDisplayColor, isEraserStroke, DOODLE_ERASER_COLOR, DOODLE_PEN_COLOR } from '@/constants/doodle';
 import { deleteThought, readThoughts, updateThoughtStrokes, updateThoughtText, type DoodleStroke } from '@/lib/doodle-store';
+import { markThoughtDeletedToast } from '@/lib/thought-toast';
 
 const COLORS = {
   white: '#FFFFFF',
@@ -71,6 +72,7 @@ export default function ThoughtDetailScreen() {
   const [bodySelection, setBodySelection] = useState<{ start: number; end: number } | undefined>();
   const [discardModalVisible, setDiscardModalVisible] = useState(false);
   const [discardTarget, setDiscardTarget] = useState<'screen' | 'doodle' | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const currentStrokeRef = useRef<DoodleStroke | null>(null);
   const titleInputRef = useRef<TextInput>(null);
   const bodyInputRef = useRef<TextInput>(null);
@@ -99,7 +101,7 @@ export default function ThoughtDetailScreen() {
     thought
       ? thought.strokes.map((stroke) => ({
           ...stroke,
-          width: stroke.color.toLowerCase() === '#f7f7f7' || stroke.color === COLORS.white ? DOODLE_ERASER_WIDTH : DOODLE_PEN_WIDTH,
+          width: isEraserStroke(stroke) ? DOODLE_ERASER_WIDTH : DOODLE_PEN_WIDTH,
           points: stroke.points.map((point) => ({ ...point })),
         }))
       : [];
@@ -170,7 +172,7 @@ export default function ThoughtDetailScreen() {
           const coordinateScale = DOODLE_COORDINATE_SIZE / EDITOR_CANVAS_SIZE;
           const nextStroke: DoodleStroke = {
             points: [{ x: locationX * coordinateScale, y: locationY * coordinateScale }],
-            color: editTool === 'eraser' ? COLORS.white : COLORS.mainBlue,
+            color: editTool === 'eraser' ? DOODLE_ERASER_COLOR : DOODLE_PEN_COLOR,
             width: editTool === 'eraser' ? DOODLE_ERASER_WIDTH : DOODLE_PEN_WIDTH,
           };
 
@@ -204,65 +206,16 @@ export default function ThoughtDetailScreen() {
     [editTool],
   );
 
-  if (!thought) {
-    return (
-      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        <View style={styles.centerState}>
-          <Text style={styles.emptyTitle}>Thought not found</Text>
-          <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}>
-            <Text style={styles.backButtonText}>Go back</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const handleEdit = () => {
-    openEdit();
-  };
-
-  const handleSaveText = () => {
-    if (!thought) {
-      return;
-    }
-
-    updateThoughtText(thought.id, draftTitle, draftBody);
-    setTextEditOpen(false);
-  };
-
-  const scrollToField = (fieldY: number) => {
-    scrollRef.current?.scrollTo({ y: Math.max(fieldY - 120, 0), animated: true });
-  };
-
-  const scrollToCursor = () => {
-    requestAnimationFrame(() => {
-      scrollRef.current?.scrollToEnd({ animated: true });
-    });
-  };
-
-  const handleDoodleHistoryPress = () => {
-    if (redoStrokes.length > 0) {
-      const nextStroke = redoStrokes[redoStrokes.length - 1];
-      setRedoStrokes((currentRedoStrokes) => currentRedoStrokes.slice(0, -1));
-      setEditingStrokes((currentStrokes) => [...currentStrokes, nextStroke]);
-      return;
-    }
-
-    setEditingStrokes((currentStrokes) => {
-      if (currentStrokes.length === 0) {
-        return currentStrokes;
-      }
-
-      const nextStroke = currentStrokes[currentStrokes.length - 1];
-      setRedoStrokes((currentRedoStrokes) => [...currentRedoStrokes, nextStroke]);
-      return currentStrokes.slice(0, -1);
-    });
-  };
-
   const handleDelete = () => {
+    if (!thoughtId) {
+      return;
+    }
+
     setMenuOpen(false);
-    deleteThought(thought.id);
-    router.replace('/');
+    setIsDeleting(true);
+    deleteThought(thoughtId);
+    markThoughtDeletedToast();
+    router.back();
   };
 
   const requestDiscard = (target: 'screen' | 'doodle') => {
@@ -321,8 +274,67 @@ export default function ThoughtDetailScreen() {
       });
 
       return () => subscription.remove();
-    }, [discardModalVisible, doodleEditOpen, hasUnsavedTextChanges, isAnyEditorOpen, router]),
+    }, [discardModalVisible, doodleEditOpen, hasUnsavedDoodleChanges, hasUnsavedTextChanges, isAnyEditorOpen, router]),
   );
+
+  if (!thought) {
+    if (isDeleting) {
+      return <View style={styles.deletingState} />;
+    }
+
+    return (
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        <View style={styles.centerState}>
+          <Text style={styles.emptyTitle}>Thought not found</Text>
+          <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}>
+            <Text style={styles.backButtonText}>Go back</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const handleEdit = () => {
+    openEdit();
+  };
+
+  const handleSaveText = () => {
+    if (!thought) {
+      return;
+    }
+
+    updateThoughtText(thought.id, draftTitle, draftBody);
+    setTextEditOpen(false);
+  };
+
+  const scrollToField = (fieldY: number) => {
+    scrollRef.current?.scrollTo({ y: Math.max(fieldY - 120, 0), animated: true });
+  };
+
+  const scrollToCursor = () => {
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    });
+  };
+
+  const handleDoodleHistoryPress = () => {
+    if (redoStrokes.length > 0) {
+      const nextStroke = redoStrokes[redoStrokes.length - 1];
+      setRedoStrokes((currentRedoStrokes) => currentRedoStrokes.slice(0, -1));
+      setEditingStrokes((currentStrokes) => [...currentStrokes, nextStroke]);
+      return;
+    }
+
+    setEditingStrokes((currentStrokes) => {
+      if (currentStrokes.length === 0) {
+        return currentStrokes;
+      }
+
+      const nextStroke = currentStrokes[currentStrokes.length - 1];
+      setRedoStrokes((currentRedoStrokes) => [...currentRedoStrokes, nextStroke]);
+      return currentStrokes.slice(0, -1);
+    });
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -500,7 +512,7 @@ export default function ThoughtDetailScreen() {
                     <Path
                       key={`${index}-${stroke.points.length}`}
                       d={stroke.points.length > 0 ? `M ${stroke.points[0].x} ${stroke.points[0].y} ${stroke.points.slice(1).map((point) => `L ${point.x} ${point.y}`).join(' ')}` : ''}
-                      stroke={stroke.color}
+                      stroke={getStrokeDisplayColor(stroke, COLORS.white)}
                       strokeWidth={stroke.width * (DOODLE_COORDINATE_SIZE / EDITOR_CANVAS_SIZE)}
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -668,6 +680,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 32,
     gap: 16,
+  },
+  deletingState: {
+    flex: 1,
+    backgroundColor: COLORS.white,
   },
   emptyTitle: {
     color: COLORS.black,

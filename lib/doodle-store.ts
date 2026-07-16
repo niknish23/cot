@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { normalizeDoodleStrokes } from '@/constants/doodle';
+
 export type Point = {
   x: number;
   y: number;
@@ -90,7 +92,7 @@ export async function hydrateThoughts() {
 }
 
 export function saveDoodle(strokes: DoodleStroke[]) {
-  currentDoodle = cloneStrokes(strokes);
+  currentDoodle = cloneStrokes(normalizeDoodleStrokes(strokes));
 }
 
 export function saveThoughtDraft(draft: ThoughtDraft) {
@@ -137,7 +139,7 @@ export function addSavedThought(strokes: DoodleStroke[]) {
     id: String(Date.now()),
     title: pendingThought.title,
     body: pendingThought.body,
-    strokes: cloneStrokes(strokes),
+    strokes: cloneStrokes(normalizeDoodleStrokes(strokes)),
     createdAt,
   };
 
@@ -171,7 +173,7 @@ export function updateThoughtStrokes(id: string, strokes: DoodleStroke[]) {
     thought.id === id
       ? {
           ...thought,
-          strokes: cloneStrokes(strokes),
+          strokes: cloneStrokes(normalizeDoodleStrokes(strokes)),
         }
       : thought,
   );

@@ -24,8 +24,10 @@ import { EmptyCalendarIcon } from '@/components/icons/empty-calendar-icon';
 import { NoThoughtsIcon } from '@/components/icons/no-thoughts-icon';
 import { PlusIcon } from '@/components/icons/plus-icon';
 import { SearchIcon } from '@/components/icons/search-icon';
+import { ThoughtDeletedToast } from '@/components/thought-deleted-toast';
 import { clearPendingThoughtDate, hydrateThoughts, readThoughts, setPendingThoughtDate, type ThoughtNote } from '@/lib/doodle-store';
 import { useResponsiveLayout } from '@/lib/responsive-layout';
+import { consumeThoughtDeletedToast } from '@/lib/thought-toast';
 
 const COLORS = {
   white: '#FFFFFF',
@@ -209,7 +211,7 @@ function DayThoughtCardItem({
       onPress={() => onPress(card.id)}
       style={({ pressed }) => [styles.dayCard, pressed && styles.cardPressed]}>
       <View style={styles.dayCardPreviewWrap}>
-        <DoodlePreview strokes={card.strokes} width={40} height={42} padding={8} />
+        <DoodlePreview strokes={card.strokes} width={40} height={42} padding={8} backgroundColor={COLORS.slightWhite} />
       </View>
       <Text style={styles.dayCardText}>{card.title}</Text>
     </Pressable>
@@ -398,7 +400,13 @@ function ThoughtCardItem({
       ]}>
       <View style={styles.cardIconContainer}>
         <View style={styles.cardPreviewFrame}>
-          <DoodlePreview strokes={card.strokes} width={86} height={56} padding={8} />
+          <DoodlePreview
+            strokes={card.strokes}
+            width={86}
+            height={56}
+            padding={8}
+            backgroundColor={isBlue ? COLORS.cardBlue : COLORS.slightWhite}
+          />
         </View>
       </View>
       <Text style={styles.cardText}>{card.title}</Text>
@@ -432,6 +440,7 @@ function CalendarCellIcon({ cell }: { cell: CalendarCellItem }) {
         width={28}
         height={28}
         padding={2}
+        backgroundColor={cell.isToday ? COLORS.mainBlue : COLORS.white}
         strokeColor={cell.isToday ? COLORS.white : undefined}
       />
     );
@@ -698,7 +707,7 @@ function DiaryPane({
 export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: JournalTab; onThoughtPress?: (id: string) => void }) {
   const router = useRouter();
   const layout = useResponsiveLayout();
-  const { insets, scale, bottomNavOffset, bottomContentPadding, horizontalPadding, headerHeight, contentMaxWidth } = layout;
+  const { insets, scale, bottomNavOffset, bottomNavHeight, bottomContentPadding, horizontalPadding, headerHeight, contentMaxWidth } = layout;
   const [activeTab, setActiveTab] = useState<JournalTab>(initialTab);
   const [contentWidth, setContentWidth] = useState(0);
   const [barWidth, setBarWidth] = useState(0);
@@ -707,6 +716,7 @@ export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: Jour
   const [searchOriginTab, setSearchOriginTab] = useState<JournalTab>(initialTab);
   const [searchInputFocused, setSearchInputFocused] = useState(false);
   const [selectedDiaryDay, setSelectedDiaryDay] = useState<SelectedDiaryDay | null>(null);
+  const [showDeletedToast, setShowDeletedToast] = useState(false);
   const contentTranslateX = useRef(new Animated.Value(0)).current;
   const overlayX = useRef(new Animated.Value(0)).current;
   const searchTransition = useRef(new Animated.Value(0)).current;
@@ -738,6 +748,10 @@ export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: Jour
 
   useFocusEffect(
     useCallback(() => {
+      if (consumeThoughtDeletedToast()) {
+        setShowDeletedToast(true);
+      }
+
       void hydrateThoughts().then(() => {
         setNotesVersion((version) => version + 1);
       });
@@ -1070,6 +1084,16 @@ export function JournalScreen({ initialTab, onThoughtPress }: { initialTab: Jour
           onAddThought={handleAddThoughtForDay}
           onCardPress={onThoughtPress ?? (() => {})}
           onClose={closeDiaryDaySheet}
+        />
+      ) : null}
+
+      {showDeletedToast ? (
+        <ThoughtDeletedToast
+          onHide={() => setShowDeletedToast(false)}
+          style={{
+            bottom: bottomNavOffset + bottomNavHeight + 12 * scale,
+            paddingHorizontal: horizontalPadding,
+          }}
         />
       ) : null}
     </View>
